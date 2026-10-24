@@ -105,3 +105,108 @@ async function freshDbKeep() {
   const { getDb } = await import("@/db");
   return getDb();
 }
+
+describe("gemini model handling", () => {
+  beforeEach(async () => {
+    const { resetGeminiState } = await import("@/agent/providers/gemini");
+    resetGeminiState();
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const okBody = (text = "hi") => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }), { status: 200 });
+  const modelOf = (url: string) => url.split("/models/")[1].split(":")[0];
+
+  async function provider() {
+    const { GeminiProvider } = await import("@/agent/providers/gemini");
+    return new GeminiProvider(providerConfig("gemini")!);
+  }
+
+  it("reads the replacement model from Google's 404 message", async () => {
+    const { suggestedModel } = await import("@/agent/providers/gemini");
+    const msg =
+      '{"error":{"code":404,"message":"This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements.","status":"NOT_FOUND"}}';
+    expect(suggestedModel(msg)).toBe("gemini-3.8-flash");
+    expect(suggestedModel("nothing here")).toBeNull();
+  });
+
+  it("never calls a retired model (GEMINI_MODEL=gemini-2.5-flash) and uses the fast lite model", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "k");
+    vi.stubEnv("GEMINI_MODEL", "gemini-2.5-flash");
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (urls.push(url), okBody())));
+    const p = await provider();
+    await p.generate({ system: "s", prompt: "p" });
+    expect(urls.map(modelOf)).toEqual(["gemini-flash-lite-latest"]);
+    expect(p.model).toBe("gemini-flash-lite-latest");
+  });
+
+  it("moves to the next model when one is busy (503) or over its free limit (429), and rests it", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "k");
+    vi.stubEnv("GEMINI_MODEL", "gemini-3.8-flash,gemini-flash-lite-latest");
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(url);
+      if (url.includes("3.8")) return new Response('{"error":{"code":503,"message":"This model is currently experiencing high demand."}}', { status: 503 });
+      return okBody("from lite");
+    }));
+    const p = await provider();
+    expect((await p.generate({ system: "s", prompt: "p" })).text).toBe("from lite");
+    await p.generate({ system: "s", prompt: "p" }); // 3.8 is resting now: straight to lite
+    expect(urls.map(modelOf)).toEqual(["gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-flash-lite-latest"]);
+  });
+
+  it("moves on when a model is too slow", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "k");
+    vi.stubEnv("GEMINI_MODEL", "gemini-slow-flash,gemini-flash-lite-latest");
+    vi.stubEnv("GEMINI_MODEL_TIMEOUT_MS", "200");
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      if (url.includes("slow"))
+        return new Promise<Response>((_, reject) => init.signal!.addEventListener("abort", () => reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"))));
+      return okBody("fast");
+    }));
+    const p = await provider();
+    expect((await p.generate({ system: "s", prompt: "p" })).text).toBe("fast");
+  });
+
+  it("follows Google's suggested replacement on a 404", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "k");
+    vi.stubEnv("GEMINI_MODEL", "gemini-old-flash");
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(url);
+      if (url.includes("old")) return new Response('{"error":{"message":"gone. Please update your code to use models/gemini-new-flash for more."}}', { status: 404 });
+      return okBody();
+    }));
+    const p = await provider();
+    await p.generate({ system: "s", prompt: "p" });
+    expect(urls.map(modelOf)).toEqual(["gemini-old-flash", "gemini-new-flash"]);
+  });
+
+  it("retries without the thinking setting if a model rejects it", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "k");
+    vi.stubEnv("GEMINI_MODEL", "gemini-9-flash");
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      bodies.push(body);
+      if (body.generationConfig.thinkingConfig) return new Response('{"error":{"message":"Unknown field thinkingLevel in thinking_config"}}', { status: 400 });
+      return okBody("ok");
+    }));
+    const p = await provider();
+    expect((await p.generate({ system: "s", prompt: "p" })).text).toBe("ok");
+    expect(bodies).toHaveLength(2);
+  });
+
+  it("gives a clear, retryable error when every model is busy", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "k");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":{"code":429,"message":"You exceeded your current quota"}}', { status: 429 })));
+    const p = await provider();
+    const err = await p.generate({ system: "s", prompt: "p" }).catch((e) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err.retryable).toBe(true);
+    expect(err.message).toContain("free limit reached");
+  });
+});

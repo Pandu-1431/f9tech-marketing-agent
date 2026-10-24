@@ -44,7 +44,7 @@ export function providerConfig(name: string): ProviderConfig | null {
         name,
         driver: "gemini",
         apiKey: e.GEMINI_API_KEY,
-        model: e.GEMINI_MODEL ?? "gemini-2.5-flash",
+        model: e.GEMINI_MODEL ?? "gemini-flash-lite-latest,gemini-flash-latest",
         baseUrl: e.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta",
         dailyLimit: num(e.GEMINI_DAILY_LIMIT, 200),
         costPer1kInputUsd: 0,

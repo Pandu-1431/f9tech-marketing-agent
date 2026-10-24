@@ -93,18 +93,22 @@ export async function recoverStaleJobs(olderThanMinutes = 10, before?: Date): Pr
   return ((result as unknown as { rows: unknown[] }).rows ?? []).length;
 }
 
-/** Latest unresolved problem for a campaign's jobs (shown on the campaign page). */
+/**
+ * Problem with the campaign's MOST RECENT job (shown on the campaign page).
+ * Older failed attempts are ignored, so after a Retry the old error disappears.
+ */
 export async function campaignJobProblem(workspaceId: number, campaignId: number): Promise<{ error: string; attempts: number; status: string } | null> {
   const db = await getDb();
   const result = await db.execute(sql`
     SELECT error, attempts, status FROM ${schema.jobs}
     WHERE workspace_id = ${workspaceId}
       AND (payload->>'campaignId')::int = ${campaignId}
-      AND error IS NOT NULL AND status IN ('queued','failed')
+      AND type LIKE 'campaign.%'
     ORDER BY id DESC LIMIT 1
   `);
-  const row = (result as unknown as { rows: { error: string; attempts: number; status: string }[] }).rows?.[0];
-  return row ?? null;
+  const row = (result as unknown as { rows: { error: string | null; attempts: number; status: string }[] }).rows?.[0];
+  if (!row?.error || !["queued", "failed"].includes(row.status)) return null;
+  return { error: row.error, attempts: row.attempts, status: row.status };
 }
 
 /*
