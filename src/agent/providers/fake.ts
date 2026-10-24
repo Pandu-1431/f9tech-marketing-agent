@@ -55,6 +55,19 @@ export class FakeProvider implements TextProvider {
         poster_headline: ["Diwali Gift Boxes 20% Off", "Fresh Sweets, Made Today", "Last 3 Days of the Offer", "Gift Sweetness This Diwali"][(n - 1) % 4],
         poster_cta: ["Order Now", "Visit Today", "Pre-order on WhatsApp"][(n - 1) % 3],
       });
+    } else if (p.includes("TASK: REEL_SCRIPT")) {
+      const theme = /CAMPAIGN THEME: ([^\n]+)/.exec(p)?.[1] ?? "our offer";
+      const brand = /Name: ([^\n]+)/.exec(req.system)?.[1] ?? "us";
+      text = JSON.stringify({
+        title: `${theme} — reel`,
+        scenes: [
+          { voiceover: `Looking for the perfect festive gift? Stop scrolling.`, on_screen: "The perfect festive gift?", image_prompt: "festive gift box with sweets, warm light" },
+          { voiceover: `At ${brand}, every sweet is made fresh, every single morning.`, on_screen: "Made fresh every morning", image_prompt: "sweets being made in a clean kitchen" },
+          { voiceover: `This week only: ${theme}.`, on_screen: "This week only", image_prompt: "beautiful gift boxes stacked on a shop counter" },
+          { voiceover: `Pre-order on WhatsApp and pick it up the same day.`, on_screen: "Pre-order today", image_prompt: "smiling customer receiving a gift box" },
+        ],
+        cta: "Order on WhatsApp",
+      });
     } else {
       text = JSON.stringify({ ok: true });
     }

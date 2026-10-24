@@ -18,6 +18,9 @@ import {
  * and every read/write goes through src/lib/data, which always filters by it.
  */
 
+export type ReelScene = { voiceover: string; onScreen: string; imagePrompt: string };
+export type ReelScript = { title: string; scenes: ReelScene[]; cta: string; voice?: string; durationSec?: number };
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 120 }).notNull(),
@@ -143,6 +146,10 @@ export const posts = pgTable(
     posterTemplate: varchar("poster_template", { length: 30 }).default("band").notNull(),
     // none | designing | done | failed
     designStatus: varchar("design_status", { length: 12 }).default("none").notNull(),
+    // Video Studio: none | making | done | failed
+    reelStatus: varchar("reel_status", { length: 12 }).default("none").notNull(),
+    reelScript: jsonb("reel_script").$type<ReelScript | null>(),
+    reelError: text("reel_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

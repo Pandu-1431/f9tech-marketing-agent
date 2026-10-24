@@ -141,7 +141,7 @@ export async function getPost(workspaceId: number, id: number) {
 export async function updatePost(
   workspaceId: number,
   id: number,
-  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterTemplate" | "designStatus">>,
+  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterTemplate" | "designStatus" | "reelStatus" | "reelError">>,
 ) {
   const db = await getDb();
   const [row] = await db
@@ -215,4 +215,18 @@ export async function setBrandLogo(workspaceId: number, brandId: number, logoKey
     .update(schema.brands)
     .set({ logoKey, updatedAt: new Date() })
     .where(and(eq(schema.brands.workspaceId, workspaceId), eq(schema.brands.id, brandId)));
+}
+
+/** Latest reel video for each post in a campaign. */
+export async function latestVideos(workspaceId: number, campaignId: number) {
+  const db = await getDb();
+  const rows = await db
+    .select({ asset: schema.assets })
+    .from(schema.assets)
+    .innerJoin(schema.posts, eq(schema.posts.id, schema.assets.postId))
+    .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId), eq(schema.assets.kind, "video")))
+    .orderBy(desc(schema.assets.id));
+  const byPost = new Map<number, (typeof rows)[number]["asset"]>();
+  for (const r of rows) if (r.asset.postId && !byPost.has(r.asset.postId)) byPost.set(r.asset.postId, r.asset);
+  return byPost;
 }

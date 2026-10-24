@@ -48,7 +48,7 @@ export function clearProviderOverrides(): void {
   overrides.clear();
 }
 
-function buildProvider(name: string): { provider: TextProvider; dailyLimit: number; cfg: ReturnType<typeof providerConfig> } | null {
+export function buildProvider(name: string): { provider: TextProvider; dailyLimit: number; cfg: ReturnType<typeof providerConfig> } | null {
   const cfg = providerConfig(name);
   const override = overrides.get(name);
   if (override) return { provider: override, dailyLimit: cfg?.dailyLimit ?? 100000, cfg };

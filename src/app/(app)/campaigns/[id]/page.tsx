@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import {
   editPostAction,
   editPosterTextAction,
+  makeReelAction,
   redesignPostAction,
   retryCampaignAction,
   reviewPostAction,
@@ -11,7 +12,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import { StatusBadge } from "@/components/status-badge";
 import { requireAuth } from "@/lib/auth";
-import { getBrand, getCampaign, latestPosters, listCampaignPosts } from "@/lib/data";
+import { getBrand, getCampaign, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
 const TEMPLATE_LABELS: Record<string, string> = { band: "Bottom band", top: "Top headline", center: "Centre card" };
@@ -21,14 +22,16 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const campaign = await getCampaign(workspace.id, Number(id));
   if (!campaign) notFound();
-  const [brand, posts, posters] = await Promise.all([
+  const [brand, posts, posters, videos] = await Promise.all([
     getBrand(workspace.id, campaign.brandId),
     listCampaignPosts(workspace.id, campaign.id),
     latestPosters(workspace.id, campaign.id),
+    latestVideos(workspace.id, campaign.id),
   ]);
+  const makingVideos = posts.filter((p) => p.reelStatus === "making").length;
   const designing = posts.filter((p) => p.status !== "idea" && (p.designStatus === "designing" || (campaign.status === "ready" && p.designStatus === "none")));
   const working =
-    campaign.status === "planning" || campaign.status === "writing" || campaign.status === "draft" || posts.some((p) => p.status === "idea") || designing.length > 0;
+    campaign.status === "planning" || campaign.status === "writing" || campaign.status === "draft" || posts.some((p) => p.status === "idea") || designing.length > 0 || makingVideos > 0;
   const canEdit = role !== "client";
   const drafted = posts.filter((p) => p.status !== "idea").length;
 
@@ -62,7 +65,9 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
             ? ": planning the calendar"
             : drafted < posts.length
               ? `: ${drafted} of ${posts.length} posts written`
-              : `: designing posters (${posts.length - designing.length} of ${posts.length} done)`}
+              : designing.length > 0
+                ? `: designing posters (${posts.length - designing.length} of ${posts.length} done)`
+                : `: making ${makingVideos} reel video${makingVideos === 1 ? "" : "s"} (script → images → voice → video)`}
           . This page updates by itself.
         </p>
       )}
@@ -137,6 +142,57 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                       </div>
                     </>
                   )}
+                  <div className="mt-3 border-t border-zinc-100 pt-3">
+                    <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Reel video</p>
+                    {post.reelStatus === "making" ? (
+                      <div className="flex aspect-[9/16] w-full items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-sm text-zinc-500">
+                        Making video… script → images → voice → video
+                      </div>
+                    ) : videos.get(post.id) ? (
+                      <>
+                        <video
+                          src={publicUrl(videos.get(post.id)!.storageKey)}
+                          poster={posters.get(post.id) ? publicUrl(posters.get(post.id)!.storageKey) : undefined}
+                          controls
+                          preload="metadata"
+                          playsInline
+                          className="w-full rounded-lg border border-zinc-200 bg-black"
+                        />
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {post.reelScript?.durationSec ? `${post.reelScript.durationSec}s · ` : ""}
+                          {post.reelScript?.scenes.length ?? 0} scenes · voice: {post.reelScript?.voice ?? "—"}
+                        </p>
+                      </>
+                    ) : (
+                      post.reelStatus === "failed" && <p className="text-xs text-red-600">{post.reelError ?? "Video failed"}</p>
+                    )}
+                    {canEdit && post.reelStatus !== "making" && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <form action={makeReelAction.bind(null, post.id)}>
+                          <button className="badge border border-zinc-200 bg-white text-zinc-600">
+                            {videos.get(post.id) ? "Remake video" : "Make reel video"}
+                          </button>
+                        </form>
+                        {videos.get(post.id) && (
+                          <a href={publicUrl(videos.get(post.id)!.storageKey)} download={`reel-${post.id}.mp4`} className="badge border border-zinc-200 bg-white text-zinc-600">
+                            Download video
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {post.reelScript && (
+                      <details className="mt-1.5 text-xs text-zinc-600">
+                        <summary className="cursor-pointer">Script</summary>
+                        <ol className="mt-1 list-decimal space-y-1 pl-4">
+                          {post.reelScript.scenes.map((sc, i) => (
+                            <li key={i}>
+                              <b>{sc.onScreen}</b> — {sc.voiceover}
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-3">
                 <form action={editPostAction.bind(null, post.id)} className="space-y-2">

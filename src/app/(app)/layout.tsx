@@ -17,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/brands" className="hover:text-zinc-900">Business accounts</Link>
             <Link href="/campaigns" className="hover:text-zinc-900">Campaigns</Link>
             <Link href="/library" className="hover:text-zinc-900">Library</Link>
+            <Link href="/settings/ai" className="hover:text-zinc-900">AI connections</Link>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="text-zinc-500">

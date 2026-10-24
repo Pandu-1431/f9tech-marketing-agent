@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { listAssets } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
-const KINDS: Record<string, string> = { poster: "Posters", background: "AI images", logo: "Logos" };
+const KINDS: Record<string, string> = { poster: "Posters", video: "Videos", background: "AI images", scene: "Reel scenes", logo: "Logos" };
 
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
   const { workspace } = await requireAuth();
@@ -29,14 +29,21 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {assets.map(({ asset, brandName }) => (
-            <a key={asset.id} href={publicUrl(asset.storageKey)} target="_blank" rel="noreferrer" className="card block p-2 hover:border-indigo-300">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={publicUrl(asset.storageKey)} alt="" className="aspect-square w-full rounded-md bg-zinc-50 object-contain" loading="lazy" />
+            <div key={asset.id} className="card p-2">
+              {asset.kind === "video" ? (
+                <video src={publicUrl(asset.storageKey)} controls preload="metadata" playsInline className="aspect-[9/16] w-full rounded-md bg-black" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={publicUrl(asset.storageKey)} alt="" className="aspect-square w-full rounded-md bg-zinc-50 object-contain" loading="lazy" />
+              )}
               <p className="mt-2 truncate text-xs text-zinc-600">{brandName ?? "—"}</p>
               <p className="text-xs text-zinc-400">
                 {asset.width && asset.height ? `${asset.width}×${asset.height}` : ""} · {asset.provider}
               </p>
-            </a>
+              <a href={publicUrl(asset.storageKey)} target="_blank" rel="noreferrer" className="text-xs text-indigo-600">
+                Open
+              </a>
+            </div>
           ))}
         </div>
       )}

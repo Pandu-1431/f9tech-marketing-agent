@@ -15,6 +15,13 @@
       "when": 1792849538774,
       "tag": "0001_design_studio",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792852194437,
+      "tag": "0002_video_studio",
+      "breakpoints": true
     }
   ]
 }

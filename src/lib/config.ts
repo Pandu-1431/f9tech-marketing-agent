@@ -25,6 +25,7 @@ export function freePlan() {
     monthlyTextGenerations: num(process.env.AGENT_MONTHLY_TEXT_GENERATIONS, 600),
     monthlyImageGenerations: num(process.env.AGENT_MONTHLY_IMAGE_GENERATIONS, 200),
     trialDays: num(process.env.AGENT_TRIAL_DAYS, 21),
+    monthlyVideos: num(process.env.AGENT_MONTHLY_VIDEOS, 30),
   };
 }
 
@@ -144,4 +145,60 @@ export function imageProviderConfig(name: string): ImageProviderConfig | null {
     default:
       return null;
   }
+}
+
+// ---------- Voice (text-to-speech) providers ----------
+
+export type VoiceProviderConfig = {
+  name: string;
+  driver: "cloudflare" | "piper" | "silent";
+  apiKey?: string;
+  accountId?: string;
+  model: string;
+  command?: string;
+  dailyLimit: number;
+};
+
+export function voiceChain(): string[] {
+  return (process.env.AGENT_VOICE_CHAIN ?? "cloudflare,piper,silent")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function voiceProviderConfig(name: string): VoiceProviderConfig | null {
+  const e = process.env;
+  switch (name) {
+    case "cloudflare":
+      // Cloudflare Workers AI MeloTTS (same free allowance + token as images)
+      return {
+        name,
+        driver: "cloudflare",
+        apiKey: e.CLOUDFLARE_API_TOKEN,
+        accountId: e.CLOUDFLARE_ACCOUNT_ID,
+        model: e.CLOUDFLARE_TTS_MODEL ?? "@cf/myshell-ai/melotts",
+        dailyLimit: num(e.CLOUDFLARE_TTS_DAILY_LIMIT, 200),
+      };
+    case "piper":
+      // Piper: free neural voice that runs on your own machine.
+      // Install: pip install piper-tts ; download a voice (.onnx + .onnx.json) and set PIPER_MODEL.
+      return {
+        name,
+        driver: "piper",
+        model: e.PIPER_MODEL ?? "",
+        command: e.PIPER_COMMAND ?? "python3 -m piper",
+        dailyLimit: 1_000_000,
+      };
+    case "silent":
+      // Fallback: no voice, the reel still gets music and subtitles.
+      return { name, driver: "silent", model: "silent", dailyLimit: 1_000_000 };
+    default:
+      return null;
+  }
+}
+
+export function ffmpegPath(): string {
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require("ffmpeg-static") as string;
 }

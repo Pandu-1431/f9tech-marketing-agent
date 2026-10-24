@@ -84,6 +84,8 @@ tests/                 vitest: tenant isolation, limits, router, pipeline
 - [x] Layer 1 — accounts, workspaces, business accounts (Brand Kit), free limits
 - [x] Layer 2 — Model Router (Gemini, Groq, OpenRouter, local), campaign planner, copywriter, review/approve
 - [x] Layer 3 — Design studio: logo upload, AI backgrounds (Cloudflare / Hugging Face / offline), poster templates with logo + headline + button, per-platform sizes, asset library, 21-day free trial
+- [x] Video Studio — reel script → scene images → voice (Cloudflare MeloTTS / Piper / silent) → subtitles, logo, progress bar → slow zoom, fades, music → 1080×1920 MP4
+- [x] AI connections page — status of every provider, where to get each free key, one-click Test
 - [ ] Layer 4 — SEO + SMO: keyword/trend suggestions, hashtag sets, best time to post, Google Business Profile posts
 - [ ] Layer 5 — tracking: in-app tracker + Google Sheet sync per business account
 - [ ] Layer 6 — publishing to Facebook + Instagram (Meta Graph API), analytics pull

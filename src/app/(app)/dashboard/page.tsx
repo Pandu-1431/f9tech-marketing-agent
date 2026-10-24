@@ -4,6 +4,7 @@ import { freePlan, textChain } from "@/lib/config";
 import { countBrands, listCampaigns, postStatusCounts, recentGenerations } from "@/lib/data";
 import { workspaceTextUsageThisMonth } from "@/agent/router";
 import { workspaceImageUsageThisMonth } from "@/agent/images/router";
+import { workspaceVideosThisMonth } from "@/agent/video/reel";
 import { trialInfo } from "@/lib/plan";
 
 function Meter({ label, used, max }: { label: string; used: number; max: number }) {
@@ -24,10 +25,11 @@ function Meter({ label, used, max }: { label: string; used: number; max: number 
 export default async function DashboardPage() {
   const { workspace } = await requireAuth();
   const plan = freePlan();
-  const [brandCount, textUsed, imagesUsed, trial, counts, campaigns, gens] = await Promise.all([
+  const [brandCount, textUsed, imagesUsed, videosUsed, trial, counts, campaigns, gens] = await Promise.all([
     countBrands(workspace.id),
     workspaceTextUsageThisMonth(workspace.id),
     workspaceImageUsageThisMonth(workspace.id),
+    workspaceVideosThisMonth(workspace.id),
     trialInfo(workspace.id),
     postStatusCounts(workspace.id),
     listCampaigns(workspace.id),
@@ -41,10 +43,11 @@ export default async function DashboardPage() {
         <Link href="/campaigns/new" className="btn">New campaign</Link>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Meter label="Business accounts" used={brandCount} max={plan.maxBrands} />
         <Meter label="AI texts this month" used={textUsed} max={plan.monthlyTextGenerations} />
         <Meter label="AI images this month" used={imagesUsed} max={plan.monthlyImageGenerations} />
+        <Meter label="Reel videos this month" used={videosUsed} max={plan.monthlyVideos} />
         <div className="card">
           <p className="text-sm text-zinc-500">Free trial</p>
           <p className="mt-1 text-2xl font-semibold">

@@ -22,7 +22,7 @@ import { POSTER_TEMPLATES } from "@/agent/images/poster";
 function kickJobs() {
   if (process.env.AGENT_INLINE_JOBS !== "false") {
     after(async () => {
-      await processJobs(10);
+      await processJobs(30);
     });
   }
 }
@@ -138,6 +138,16 @@ export async function editPosterTextAction(postId: number, formData: FormData) {
     designStatus: "designing",
   });
   await enqueue("post.design", { workspaceId: workspace.id, postId }, workspace.id);
+  kickJobs();
+  revalidatePath(`/campaigns/${post.campaignId}`);
+}
+
+export async function makeReelAction(postId: number) {
+  const { workspace } = await requireEditor();
+  const post = await getPost(workspace.id, postId);
+  if (!post) return;
+  await updatePost(workspace.id, postId, { reelStatus: "making", reelError: null });
+  await enqueue("post.reel", { workspaceId: workspace.id, postId }, workspace.id);
   kickJobs();
   revalidatePath(`/campaigns/${post.campaignId}`);
 }

@@ -4,6 +4,7 @@ import { writePostCopy } from "@/agent/copywriter";
 import { planCampaign } from "@/agent/planner";
 import { QuotaExceededError } from "@/agent/router";
 import { designPost } from "@/agent/designer";
+import { makeReel } from "@/agent/video/reel";
 import type { PosterTemplate } from "@/agent/images/poster";
 import { TrialEndedError } from "@/lib/plan";
 import { getBrand, getCampaign, setCampaignStatus, updatePost } from "@/lib/data";
@@ -134,6 +135,40 @@ const designCampaignJob: Handler = async (payload) => {
     }
   }
   if (failures > 0) throw new Error(`${failures} poster(s) could not be made yet`);
+
+  // Posts planned as reels get a video automatically.
+  const { enqueue } = await import("./queue");
+  for (const post of todo.filter((p) => p.format === "reel" && p.reelStatus === "none" && p.status !== "idea")) {
+    await updatePost(workspaceId, post.id, { reelStatus: "making" });
+    await enqueue("post.reel", { workspaceId, postId: post.id }, workspaceId);
+  }
+};
+
+/** Video Studio: make (or remake) the reel video for one post. */
+const reelPostJob: Handler = async (payload) => {
+  const workspaceId = Number(payload.workspaceId);
+  const postId = Number(payload.postId);
+  const db = await getDb();
+  const [post] = await db
+    .select()
+    .from(schema.posts)
+    .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId)));
+  if (!post) throw permanent("Post not found");
+  const campaign = await getCampaign(workspaceId, post.campaignId);
+  const brand = await getBrand(workspaceId, post.brandId);
+  if (!campaign || !brand) throw permanent("Campaign or brand not found");
+  try {
+    await updatePost(workspaceId, postId, { reelStatus: "making", reelError: null });
+    await makeReel(campaign, brand, post);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await updatePost(workspaceId, postId, { reelStatus: "failed", reelError: message.slice(0, 500) });
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(message);
+    throw err;
+  }
+};
+reelPostJob.onFinalFailure = async (payload, error) => {
+  await updatePost(Number(payload.workspaceId), Number(payload.postId), { reelStatus: "failed", reelError: error.slice(0, 500) });
 };
 
 /** Redesign one post: new background and/or another template. */
@@ -166,4 +201,5 @@ export const handlers = {
   "post.rewrite": rewritePostJob,
   "campaign.design": designCampaignJob,
   "post.design": designPostJob,
+  "post.reel": reelPostJob,
 } satisfies Record<string, Handler>;

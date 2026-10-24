@@ -27,7 +27,7 @@ export function clearImageProviderOverrides() {
   overrides.clear();
 }
 
-function build(name: string): { provider: ImageProvider; dailyLimit: number } | null {
+export function buildImageProvider(name: string): { provider: ImageProvider; dailyLimit: number } | null {
   const cfg = imageProviderConfig(name);
   const o = overrides.get(name);
   if (o) return { provider: o, dailyLimit: cfg?.dailyLimit ?? 1_000_000 };
@@ -75,7 +75,7 @@ export async function generateImage(ctx: ImageContext, req: ImageRequest): Promi
   const db = await getDb();
   const errors: string[] = [];
   for (const name of imageChain()) {
-    const built = build(name);
+    const built = buildImageProvider(name);
     if (!built) {
       errors.push(`${name}: not configured`);
       continue;
