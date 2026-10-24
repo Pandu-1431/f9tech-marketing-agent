@@ -25,15 +25,32 @@ export class FakeProvider implements TextProvider {
             date: d.toISOString().slice(0, 10),
             platform: platforms[i % platforms.length],
             format: i % 3 === 2 ? "reel" : "image",
-            angle: `Angle ${i + 1}: show the product in a real customer moment`,
+            angle: `Angle ${i + 1}: ${[
+              "a family opening a gift box together",
+              "close-up of fresh sweets being made in the kitchen",
+              "behind the scenes: packing festive orders",
+              "customer favourite of the week",
+              "countdown reminder before the offer ends",
+              "the story behind our 40-year-old recipe",
+            ][i % 6]}`,
           };
         }),
       });
     } else if (p.includes("TASK: POST_COPY")) {
+      const theme = /CAMPAIGN THEME: ([^\n]+)/.exec(p)?.[1] ?? "our offer";
+      const platform = /PLATFORM: ([^\n]+)/.exec(p)?.[1] ?? "instagram";
+      const angle = (/POST ANGLE: ([^\n]+)/.exec(p)?.[1] ?? "").replace(/^Angle \d+:\s*/, "");
+      const brand = /Name: ([^\n]+)/.exec(req.system)?.[1] ?? "us";
+      const n = Number(/Angle (\d+)/.exec(p)?.[1] ?? 1);
+      const hooks = ["This festive season, make every moment sweeter.", "Your gifting list just got easier.", "Only a few days left!", "Made fresh, shared with love."];
+      const hook = hooks[(n - 1) % hooks.length];
       text = JSON.stringify({
-        caption: "Fresh look, festive deals. Visit us this week and save more. 🎉",
+        caption:
+          platform === "facebook"
+            ? `${hook} ${theme} at ${brand}. Idea for today: ${angle}. Drop by this week or message us to pre-order.`
+            : `${hook} ✨\n\n${theme} — only at ${brand}.\n${angle}.\n\nTap the link in bio to pre-order 🎁`,
         hashtags: ["#festiveoffer", "#shoplocal", "#vizag"],
-        image_prompt: "Bright festive product photo, brand colours, clean background, warm light",
+        image_prompt: `On-brand photo for ${brand}: ${angle}, brand colours, warm festive light`,
         seo_keywords: ["festive offer", "best deals near me"],
       });
     } else {
