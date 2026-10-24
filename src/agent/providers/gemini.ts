@@ -22,6 +22,9 @@ export class GeminiProvider implements TextProvider {
       generationConfig: {
         temperature: req.temperature ?? 0.8,
         ...(req.json ? { responseMimeType: "application/json" } : {}),
+        // Gemini 2.5 Flash "thinks" before answering by default, which is slow.
+        // Marketing copy doesn't need it: budget 0 makes replies several times faster.
+        ...(this.model.includes("flash") ? { thinkingConfig: { thinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET ?? 0) } } : {}),
       },
     };
 

@@ -12,6 +12,7 @@ import { renderSceneFrame, REEL_H, REEL_W } from "./frames";
 import { ffmpeg, tempDir, wavDurationSec } from "./ffmpeg";
 import { writeReelScript } from "./script";
 import { speak } from "./voice";
+import { mapLimit, parallelism } from "@/lib/concurrency";
 
 /*
  * Video Studio pipeline for one post:
@@ -76,10 +77,8 @@ export async function buildReelVideo(input: {
   let voiceProvider = "";
 
   try {
-    const parts: string[] = [];
-    let total = 0;
-
-    for (const [i, scene] of script.scenes.entries()) {
+    // Each scene (image + voice + frame + clip) is prepared in parallel; order is kept.
+    const sceneResults = await mapLimit(script.scenes, parallelism().image, async (scene, i) => {
       const last = i === script.scenes.length - 1;
 
       // 2. image
@@ -153,9 +152,13 @@ export async function buildReelVideo(input: {
         "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
         clip,
       ]);
-      parts.push(clip);
-      total += dur;
-    }
+      return { clip, dur };
+    });
+    const failed = sceneResults.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+    if (failed) throw failed.reason;
+    const done = sceneResults.map((r) => (r as PromiseFulfilledResult<{ clip: string; dur: number }>).value);
+    const parts = done.map((d) => d.clip);
+    const total = done.reduce((a, d) => a + d.dur, 0);
 
     // Join scenes.
     const list = path.join(dir, "list.txt");

@@ -36,6 +36,30 @@ export class FakeProvider implements TextProvider {
           };
         }),
       });
+    } else if (p.includes("TASK: POST_COPY_BATCH")) {
+      const ids = [...p.matchAll(/- id (\d+) \| platform (\w+)[^\n]*angle: ([^\n]*)/g)];
+      const theme = /CAMPAIGN THEME: ([^\n]+)/.exec(p)?.[1] ?? "our offer";
+      const brand = /Name: ([^\n]+)/.exec(req.system)?.[1] ?? "us";
+      const hooks = ["This festive season, make every moment sweeter.", "Your gifting list just got easier.", "Only a few days left!", "Made fresh, shared with love."];
+      text = JSON.stringify({
+        posts: ids.map(([, id, platform, angle], i) => {
+          const a = angle.replace(/^Angle \d+:\s*/, "");
+          const n = Number(/Angle (\d+)/.exec(angle)?.[1] ?? i + 1);
+          const hook = hooks[(n - 1) % hooks.length];
+          return {
+            id: Number(id),
+            caption:
+              platform === "facebook"
+                ? `${hook} ${theme} at ${brand}. Idea for today: ${a}. Drop by this week or message us to pre-order.`
+                : `${hook} ✨\n\n${theme} — only at ${brand}.\n${a}.\n\nTap the link in bio to pre-order 🎁`,
+            hashtags: ["#festiveoffer", "#shoplocal", "#vizag"],
+            image_prompt: `On-brand photo for ${brand}: ${a}, brand colours, warm festive light`,
+            seo_keywords: ["festive offer", "best deals near me"],
+            poster_headline: ["Diwali Gift Boxes 20% Off", "Fresh Sweets, Made Today", "Last 3 Days of the Offer", "Gift Sweetness This Diwali"][(n - 1) % 4],
+            poster_cta: ["Order Now", "Visit Today", "Pre-order on WhatsApp"][(n - 1) % 3],
+          };
+        }),
+      });
     } else if (p.includes("TASK: POST_COPY")) {
       const theme = /CAMPAIGN THEME: ([^\n]+)/.exec(p)?.[1] ?? "our offer";
       const platform = /PLATFORM: ([^\n]+)/.exec(p)?.[1] ?? "instagram";

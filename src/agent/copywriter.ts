@@ -59,3 +59,58 @@ export async function writePostCopy(campaign: Campaign, brand: Brand, post: Post
     posterCta: copy.poster_cta ? copy.poster_cta.slice(0, 60) : null,
   };
 }
+
+// ---------- Batch mode: several posts in one AI call (much faster, fewer requests) ----------
+
+const batchSchema = z.object({
+  posts: z.array(copySchema.extend({ id: z.coerce.number() })).min(1),
+});
+
+export function batchPrompt(campaign: Campaign, posts: Post[]): string {
+  return [
+    "TASK: POST_COPY_BATCH",
+    `CAMPAIGN THEME: ${campaign.theme}`,
+    `CAMPAIGN GOAL: ${campaign.goal ?? "grow reach and enquiries"}`,
+    "",
+    `Write the copy for each of these ${posts.length} posts. Each post must be different (new hook, new angle).`,
+    ...posts.map(
+      (p) =>
+        `- id ${p.id} | platform ${p.platform} | format ${p.format} | date ${p.publishOn} | angle: ${p.angle ?? ""}\n  Platform rules: ${platformRules[p.platform] ?? "Clear, on-brand, with a call to action."}`,
+    ),
+    "",
+    "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text.",
+    'Poster headline: max 7 words printed on the image (e.g. "Diwali Gift Boxes 20% Off"). Poster CTA: 2-3 words (e.g. "Order Now").',
+    "Image prompt: one on-brand visual (subject, setting, brand colours, mood). No text in the image.",
+    'Reply with JSON only: {"posts": [{"id": 123, "caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_cta": "..."}]}',
+  ].join("\n");
+}
+
+type CopyResult = Awaited<ReturnType<typeof writePostCopy>>;
+
+function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: Post): CopyResult {
+  const hashtags = Array.from(new Set(copy.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`).replace(/\s+/g, "")))).slice(0, 20);
+  return {
+    caption: copy.caption.trim(),
+    hashtags: post.platform === "google_business" ? [] : hashtags,
+    imagePrompt: copy.image_prompt.trim(),
+    seoKeywords: copy.seo_keywords.slice(0, 8),
+    posterHeadline: (copy.poster_headline || campaign.theme).slice(0, 120),
+    posterCta: copy.poster_cta ? copy.poster_cta.slice(0, 60) : null,
+  };
+}
+
+/** Writes several posts in one call. Returns a map of post id -> copy (missing ids = not written). */
+export async function writePostsCopyBatch(campaign: Campaign, brand: Brand, posts: Post[]): Promise<Map<number, CopyResult>> {
+  const out = await generateText(
+    { workspaceId: campaign.workspaceId, brandId: brand.id, purpose: "post_copy_batch", subject: { type: "campaign", id: campaign.id } },
+    { system: brandSystemPrompt(brand), prompt: batchPrompt(campaign, posts), json: true, temperature: 0.85 },
+  );
+  const parsed = batchSchema.parse(parseJsonObject(out.text));
+  const byId = new Map(posts.map((p) => [p.id, p]));
+  const result = new Map<number, CopyResult>();
+  for (const c of parsed.posts) {
+    const post = byId.get(c.id);
+    if (post && c.caption) result.set(post.id, normalise(c, campaign, post));
+  }
+  return result;
+}

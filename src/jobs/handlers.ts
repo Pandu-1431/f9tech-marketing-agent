@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
-import { writePostCopy } from "@/agent/copywriter";
+import { writePostCopy, writePostsCopyBatch } from "@/agent/copywriter";
+import { chunk, mapLimit, parallelism } from "@/lib/concurrency";
 import { planCampaign } from "@/agent/planner";
 import { QuotaExceededError } from "@/agent/router";
 import { designPost } from "@/agent/designer";
@@ -57,18 +58,39 @@ const writeCampaignJob: Handler = async (payload) => {
     .from(schema.posts)
     .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId), eq(schema.posts.status, "idea")));
 
+  // Write several posts per AI call, and run a few calls at the same time.
+  const { text: parallel, postsPerCall } = parallelism();
   let failures = 0;
-  for (const post of ideas) {
+  let limitError: Error | null = null;
+  const batches = chunk(ideas, postsPerCall);
+  await mapLimit(batches, parallel, async (batch) => {
+    if (limitError) return;
+    let written = new Map<number, Awaited<ReturnType<typeof writePostCopy>>>();
     try {
-      const copy = await writePostCopy(campaign, brand, post);
-      await updatePost(workspaceId, post.id, { ...copy, status: "drafted" });
+      written = await writePostsCopyBatch(campaign, brand, batch);
     } catch (err) {
       if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
-        await setCampaignStatus(workspaceId, campaignId, "failed", { error: err.message });
-        return; // stop quietly: the user has hit the free limit
+        limitError = err;
+        return;
       }
-      failures++;
+      // Batch answer was unusable: fall back to one post at a time below.
     }
+    for (const post of batch) {
+      try {
+        const copy = written.get(post.id) ?? (await writePostCopy(campaign, brand, post));
+        await updatePost(workspaceId, post.id, { ...copy, status: "drafted" });
+      } catch (err) {
+        if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
+          limitError = err;
+          return;
+        }
+        failures++;
+      }
+    }
+  });
+  if (limitError) {
+    await setCampaignStatus(workspaceId, campaignId, "failed", { error: (limitError as Error).message });
+    return; // stop quietly: the user has hit the free limit
   }
 
   if (failures > 0) {
@@ -121,19 +143,20 @@ const designCampaignJob: Handler = async (payload) => {
     .from(schema.posts)
     .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId)));
   let failures = 0;
-  for (const post of todo.filter((p) => p.designStatus !== "done" && p.status !== "idea")) {
+  let stop = false;
+  const toDesign = todo.filter((p) => p.designStatus !== "done" && p.status !== "idea");
+  await mapLimit(toDesign, parallelism().image, async (post) => {
+    if (stop) return;
     try {
       await updatePost(workspaceId, post.id, { designStatus: "designing" });
       await designPost(post, brand);
     } catch (err) {
-      if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
-        await updatePost(workspaceId, post.id, { designStatus: "failed" });
-        return;
-      }
-      failures++;
       await updatePost(workspaceId, post.id, { designStatus: "failed" });
+      if (err instanceof QuotaExceededError || err instanceof TrialEndedError) stop = true;
+      else failures++;
     }
-  }
+  });
+  if (stop) return;
   if (failures > 0) throw new Error(`${failures} poster(s) could not be made yet`);
 
   // Posts planned as reels get a video automatically.
