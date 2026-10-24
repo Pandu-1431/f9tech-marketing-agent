@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { getSession } from "@/lib/session";
+import { freePlan } from "@/lib/config";
 
 export type FormState = { error?: string } | undefined;
 
@@ -28,7 +29,8 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
   const passwordHash = await bcrypt.hash(password, 10);
   const userId = await db.transaction(async (tx) => {
     const [user] = await tx.insert(schema.users).values({ name, email, passwordHash }).returning();
-    const [ws] = await tx.insert(schema.workspaces).values({ name: business, ownerId: user.id }).returning();
+    const trialEndsAt = new Date(Date.now() + freePlan().trialDays * 86400000);
+    const [ws] = await tx.insert(schema.workspaces).values({ name: business, ownerId: user.id, trialEndsAt }).returning();
     await tx.insert(schema.memberships).values({ workspaceId: ws.id, userId: user.id, role: "owner" });
     await tx.update(schema.users).set({ currentWorkspaceId: ws.id }).where(eq(schema.users.id, user.id));
     return user.id;

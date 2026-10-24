@@ -9,6 +9,8 @@ const copySchema = z.object({
   hashtags: z.array(z.string()).default([]),
   image_prompt: z.string().default(""),
   seo_keywords: z.array(z.string()).default([]),
+  poster_headline: z.string().default(""),
+  poster_cta: z.string().default(""),
 });
 
 const platformRules: Record<string, string> = {
@@ -32,8 +34,9 @@ export function copyPrompt(campaign: Campaign, post: Post): string {
     "",
     `Platform rules: ${platformRules[post.platform] ?? "Clear, on-brand, with a call to action."}`,
     "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text.",
+    "Poster headline: the short offer/message printed on the image, max 7 words (e.g. \"Diwali Gift Boxes 20% Off\"). Poster CTA: 2-3 words (e.g. \"Order Now\").",
     "Image prompt: describe one on-brand visual (subject, setting, brand colours, mood, composition) for an AI image model. No text in the image unless essential.",
-    'Reply with JSON only: {"caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."]}',
+    'Reply with JSON only: {"caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_cta": "..."}',
   ].join("\n");
 }
 
@@ -52,5 +55,7 @@ export async function writePostCopy(campaign: Campaign, brand: Brand, post: Post
     hashtags: post.platform === "google_business" ? [] : hashtags,
     imagePrompt: copy.image_prompt.trim(),
     seoKeywords: copy.seo_keywords.slice(0, 8),
+    posterHeadline: (copy.poster_headline || campaign.theme).slice(0, 120),
+    posterCta: copy.poster_cta ? copy.poster_cta.slice(0, 60) : null,
   };
 }

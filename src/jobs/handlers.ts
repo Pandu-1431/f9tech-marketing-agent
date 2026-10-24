@@ -3,6 +3,9 @@ import { getDb, schema } from "@/db";
 import { writePostCopy } from "@/agent/copywriter";
 import { planCampaign } from "@/agent/planner";
 import { QuotaExceededError } from "@/agent/router";
+import { designPost } from "@/agent/designer";
+import type { PosterTemplate } from "@/agent/images/poster";
+import { TrialEndedError } from "@/lib/plan";
 import { getBrand, getCampaign, setCampaignStatus, updatePost } from "@/lib/data";
 
 type Payload = Record<string, unknown>;
@@ -27,7 +30,7 @@ const planCampaignJob: Handler = async (payload) => {
     const { strategy } = await planCampaign(campaign, brand);
     await setCampaignStatus(workspaceId, campaignId, "writing", { strategy });
   } catch (err) {
-    if (err instanceof QuotaExceededError) throw permanent(err.message);
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
     throw err;
   }
 
@@ -59,7 +62,7 @@ const writeCampaignJob: Handler = async (payload) => {
       const copy = await writePostCopy(campaign, brand, post);
       await updatePost(workspaceId, post.id, { ...copy, status: "drafted" });
     } catch (err) {
-      if (err instanceof QuotaExceededError) {
+      if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
         await setCampaignStatus(workspaceId, campaignId, "failed", { error: err.message });
         return; // stop quietly: the user has hit the free limit
       }
@@ -72,6 +75,8 @@ const writeCampaignJob: Handler = async (payload) => {
     throw new Error(`${failures} post(s) could not be written yet`);
   }
   await setCampaignStatus(workspaceId, campaignId, "ready", { error: null });
+  const { enqueue } = await import("./queue");
+  await enqueue("campaign.design", { workspaceId, campaignId }, workspaceId);
 };
 writeCampaignJob.onFinalFailure = async (payload, error) => {
   const { workspaceId, campaignId } = ids(payload);
@@ -93,9 +98,64 @@ const rewritePostJob: Handler = async (payload) => {
   if (!campaign || !brand) throw permanent("Campaign or brand not found");
   try {
     const copy = await writePostCopy(campaign, brand, post);
-    await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null });
+    await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null, designStatus: "designing" });
+    const fresh = { ...post, ...copy, status: "drafted" };
+    await designPost(fresh, brand);
   } catch (err) {
-    if (err instanceof QuotaExceededError) throw permanent(err.message);
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
+    throw err;
+  }
+};
+
+/** Step 3: make a poster for every drafted post that has none yet. */
+const designCampaignJob: Handler = async (payload) => {
+  const { workspaceId, campaignId } = ids(payload);
+  const campaign = await getCampaign(workspaceId, campaignId);
+  if (!campaign) throw permanent("Campaign not found");
+  const brand = await getBrand(workspaceId, campaign.brandId);
+  if (!brand) throw permanent("Brand not found");
+  const db = await getDb();
+  const todo = await db
+    .select()
+    .from(schema.posts)
+    .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId)));
+  let failures = 0;
+  for (const post of todo.filter((p) => p.designStatus !== "done" && p.status !== "idea")) {
+    try {
+      await updatePost(workspaceId, post.id, { designStatus: "designing" });
+      await designPost(post, brand);
+    } catch (err) {
+      if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
+        await updatePost(workspaceId, post.id, { designStatus: "failed" });
+        return;
+      }
+      failures++;
+      await updatePost(workspaceId, post.id, { designStatus: "failed" });
+    }
+  }
+  if (failures > 0) throw new Error(`${failures} poster(s) could not be made yet`);
+};
+
+/** Redesign one post: new background and/or another template. */
+const designPostJob: Handler = async (payload) => {
+  const workspaceId = Number(payload.workspaceId);
+  const postId = Number(payload.postId);
+  const db = await getDb();
+  const [post] = await db
+    .select()
+    .from(schema.posts)
+    .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId)));
+  if (!post) throw permanent("Post not found");
+  const brand = await getBrand(workspaceId, post.brandId);
+  if (!brand) throw permanent("Brand not found");
+  try {
+    await designPost(post, brand, {
+      newBackground: Boolean(payload.newBackground),
+      template: (payload.template as PosterTemplate | undefined) ?? undefined,
+    });
+  } catch (err) {
+    await updatePost(workspaceId, postId, { designStatus: "failed" });
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
     throw err;
   }
 };
@@ -104,4 +164,6 @@ export const handlers = {
   "campaign.plan": planCampaignJob,
   "campaign.write": writeCampaignJob,
   "post.rewrite": rewritePostJob,
+  "campaign.design": designCampaignJob,
+  "post.design": designPostJob,
 } satisfies Record<string, Handler>;

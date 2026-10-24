@@ -16,6 +16,7 @@ import {
 } from "@/lib/data";
 import { enqueue, processJobs } from "@/jobs/queue";
 import type { FormState } from "./auth";
+import { POSTER_TEMPLATES } from "@/agent/images/poster";
 
 /** In dev / single-server mode, run queued jobs right after the response. */
 function kickJobs() {
@@ -114,4 +115,29 @@ export async function retryCampaignAction(campaignId: number) {
   await enqueue(hasPosts ? "campaign.write" : "campaign.plan", { workspaceId: workspace.id, campaignId }, workspace.id);
   kickJobs();
   revalidatePath(`/campaigns/${campaignId}`);
+}
+
+export async function redesignPostAction(postId: number, opts: { newBackground?: boolean; template?: string }) {
+  const { workspace } = await requireEditor();
+  const post = await getPost(workspace.id, postId);
+  if (!post) return;
+  const template = opts.template && (POSTER_TEMPLATES as readonly string[]).includes(opts.template) ? opts.template : undefined;
+  await updatePost(workspace.id, postId, { designStatus: "designing" });
+  await enqueue("post.design", { workspaceId: workspace.id, postId, newBackground: Boolean(opts.newBackground), template }, workspace.id);
+  kickJobs();
+  revalidatePath(`/campaigns/${post.campaignId}`);
+}
+
+export async function editPosterTextAction(postId: number, formData: FormData) {
+  const { workspace } = await requireEditor();
+  const post = await getPost(workspace.id, postId);
+  if (!post) return;
+  await updatePost(workspace.id, postId, {
+    posterHeadline: String(formData.get("posterHeadline") ?? "").trim().slice(0, 120) || null,
+    posterCta: String(formData.get("posterCta") ?? "").trim().slice(0, 60) || null,
+    designStatus: "designing",
+  });
+  await enqueue("post.design", { workspaceId: workspace.id, postId }, workspace.id);
+  kickJobs();
+  revalidatePath(`/campaigns/${post.campaignId}`);
 }

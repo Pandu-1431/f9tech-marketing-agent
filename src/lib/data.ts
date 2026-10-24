@@ -141,7 +141,7 @@ export async function getPost(workspaceId: number, id: number) {
 export async function updatePost(
   workspaceId: number,
   id: number,
-  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote">>,
+  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterTemplate" | "designStatus">>,
 ) {
   const db = await getDb();
   const [row] = await db
@@ -180,4 +180,39 @@ export async function recentGenerations(workspaceId: number, limit = 20) {
     .where(eq(schema.generations.workspaceId, workspaceId))
     .orderBy(desc(schema.generations.createdAt))
     .limit(limit);
+}
+
+// ---------- Assets ----------
+
+/** Latest poster for each post in a campaign. */
+export async function latestPosters(workspaceId: number, campaignId: number) {
+  const db = await getDb();
+  const rows = await db
+    .select({ asset: schema.assets })
+    .from(schema.assets)
+    .innerJoin(schema.posts, eq(schema.posts.id, schema.assets.postId))
+    .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId), eq(schema.assets.kind, "poster")))
+    .orderBy(desc(schema.assets.id));
+  const byPost = new Map<number, (typeof rows)[number]["asset"]>();
+  for (const r of rows) if (r.asset.postId && !byPost.has(r.asset.postId)) byPost.set(r.asset.postId, r.asset);
+  return byPost;
+}
+
+export async function listAssets(workspaceId: number, kind?: string, limit = 120) {
+  const db = await getDb();
+  return db
+    .select({ asset: schema.assets, brandName: schema.brands.name })
+    .from(schema.assets)
+    .leftJoin(schema.brands, eq(schema.brands.id, schema.assets.brandId))
+    .where(kind ? and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.kind, kind)) : eq(schema.assets.workspaceId, workspaceId))
+    .orderBy(desc(schema.assets.id))
+    .limit(limit);
+}
+
+export async function setBrandLogo(workspaceId: number, brandId: number, logoKey: string) {
+  const db = await getDb();
+  await db
+    .update(schema.brands)
+    .set({ logoKey, updatedAt: new Date() })
+    .where(and(eq(schema.brands.workspaceId, workspaceId), eq(schema.brands.id, brandId)));
 }

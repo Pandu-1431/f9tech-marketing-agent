@@ -1,6 +1,7 @@
 import { and, eq, gte, sql, count } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { freePlan, providerConfig, textChain } from "@/lib/config";
+import { assertCanGenerate } from "@/lib/plan";
 import { FakeProvider } from "./providers/fake";
 import { GeminiProvider } from "./providers/gemini";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
@@ -79,7 +80,7 @@ export async function workspaceTextUsageThisMonth(workspaceId: number): Promise<
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-async function providerRequestsToday(provider: string): Promise<number> {
+export async function providerRequestsToday(provider: string): Promise<number> {
   const db = await getDb();
   const [row] = await db
     .select({ requests: schema.providerUsage.requests })
@@ -88,7 +89,7 @@ async function providerRequestsToday(provider: string): Promise<number> {
   return row?.requests ?? 0;
 }
 
-async function bumpProvider(provider: string): Promise<void> {
+export async function bumpProvider(provider: string): Promise<void> {
   const db = await getDb();
   await db
     .insert(schema.providerUsage)
@@ -100,6 +101,7 @@ async function bumpProvider(provider: string): Promise<void> {
 }
 
 export async function generateText(ctx: GenerateContext, req: TextRequest): Promise<GenerateOutput> {
+  await assertCanGenerate(ctx.workspaceId);
   const limit = freePlan().monthlyTextGenerations;
   if ((await workspaceTextUsageThisMonth(ctx.workspaceId)) >= limit) {
     throw new QuotaExceededError(`Free plan limit reached: ${limit} AI text generations this month.`);

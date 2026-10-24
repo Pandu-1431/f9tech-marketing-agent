@@ -3,6 +3,8 @@ import { requireAuth } from "@/lib/auth";
 import { freePlan, textChain } from "@/lib/config";
 import { countBrands, listCampaigns, postStatusCounts, recentGenerations } from "@/lib/data";
 import { workspaceTextUsageThisMonth } from "@/agent/router";
+import { workspaceImageUsageThisMonth } from "@/agent/images/router";
+import { trialInfo } from "@/lib/plan";
 
 function Meter({ label, used, max }: { label: string; used: number; max: number }) {
   const pct = Math.min(100, Math.round((used / Math.max(1, max)) * 100));
@@ -22,9 +24,11 @@ function Meter({ label, used, max }: { label: string; used: number; max: number 
 export default async function DashboardPage() {
   const { workspace } = await requireAuth();
   const plan = freePlan();
-  const [brandCount, textUsed, counts, campaigns, gens] = await Promise.all([
+  const [brandCount, textUsed, imagesUsed, trial, counts, campaigns, gens] = await Promise.all([
     countBrands(workspace.id),
     workspaceTextUsageThisMonth(workspace.id),
+    workspaceImageUsageThisMonth(workspace.id),
+    trialInfo(workspace.id),
     postStatusCounts(workspace.id),
     listCampaigns(workspace.id),
     recentGenerations(workspace.id, 10),
@@ -39,14 +43,16 @@ export default async function DashboardPage() {
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Meter label="Business accounts" used={brandCount} max={plan.maxBrands} />
-        <Meter label="AI generations this month" used={textUsed} max={plan.monthlyTextGenerations} />
+        <Meter label="AI texts this month" used={textUsed} max={plan.monthlyTextGenerations} />
+        <Meter label="AI images this month" used={imagesUsed} max={plan.monthlyImageGenerations} />
         <div className="card">
-          <p className="text-sm text-zinc-500">Posts waiting for review</p>
-          <p className="mt-1 text-2xl font-semibold">{counts.drafted ?? 0}</p>
-        </div>
-        <div className="card">
-          <p className="text-sm text-zinc-500">Approved posts</p>
-          <p className="mt-1 text-2xl font-semibold">{counts.approved ?? 0}</p>
+          <p className="text-sm text-zinc-500">Free trial</p>
+          <p className="mt-1 text-2xl font-semibold">
+            {trial.daysLeft} <span className="text-base font-normal text-zinc-400">days left</span>
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            {counts.drafted ?? 0} posts to review · {counts.approved ?? 0} approved
+          </p>
         </div>
       </section>
 
@@ -95,7 +101,7 @@ export default async function DashboardPage() {
               <tbody className="divide-y divide-zinc-100">
                 {gens.map((g) => (
                   <tr key={g.id}>
-                    <td className="py-1.5">{g.purpose.replace("_", " ")}</td>
+                    <td className="py-1.5">{g.purpose.replaceAll("_", " ")}</td>
                     <td className="text-zinc-600">{g.provider} · {g.model}</td>
                     <td className="text-zinc-600">{(g.durationMs / 1000).toFixed(1)}s</td>
                     <td>

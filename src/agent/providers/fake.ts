@@ -52,6 +52,8 @@ export class FakeProvider implements TextProvider {
         hashtags: ["#festiveoffer", "#shoplocal", "#vizag"],
         image_prompt: `On-brand photo for ${brand}: ${angle}, brand colours, warm festive light`,
         seo_keywords: ["festive offer", "best deals near me"],
+        poster_headline: ["Diwali Gift Boxes 20% Off", "Fresh Sweets, Made Today", "Last 3 Days of the Offer", "Gift Sweetness This Diwali"][(n - 1) % 4],
+        poster_cta: ["Order Now", "Visit Today", "Pre-order on WhatsApp"][(n - 1) % 3],
       });
     } else {
       text = JSON.stringify({ ok: true });

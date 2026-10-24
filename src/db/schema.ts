@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   serial,
@@ -36,6 +37,8 @@ export const workspaces = pgTable("workspaces", {
   plan: varchar("plan", { length: 30 }).default("free").notNull(),
   country: varchar("country", { length: 2 }).default("IN").notNull(),
   gstin: varchar("gstin", { length: 20 }),
+  // Phase 1: every new workspace gets a free trial with all tools.
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }).default(sql`now() + interval '21 days'`).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -79,6 +82,7 @@ export const brands = pgTable(
     dos: text("dos"),
     donts: text("donts"),
     logoUrl: text("logo_url"),
+    logoKey: text("logo_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -134,6 +138,11 @@ export const posts = pgTable(
     // idea | drafted | approved | rejected | published | failed
     status: varchar("status", { length: 20 }).default("idea").notNull(),
     reviewNote: text("review_note"),
+    posterHeadline: varchar("poster_headline", { length: 120 }),
+    posterCta: varchar("poster_cta", { length: 60 }),
+    posterTemplate: varchar("poster_template", { length: 30 }).default("band").notNull(),
+    // none | designing | done | failed
+    designStatus: varchar("design_status", { length: 12 }).default("none").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -180,6 +189,29 @@ export const providerUsage = pgTable(
   (t) => [uniqueIndex("provider_usage_provider_day").on(t.provider, t.day)],
 );
 
+// Every file the agent makes or the user uploads (logos, backgrounds, posters, videos, audio).
+export const assets = pgTable(
+  "assets",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id").references(() => brands.id, { onDelete: "cascade" }),
+    postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 20 }).notNull(), // logo | background | poster | video | audio | upload
+    storageKey: text("storage_key").notNull(),
+    mime: varchar("mime", { length: 60 }).notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    bytes: integer("bytes").default(0).notNull(),
+    prompt: text("prompt"),
+    provider: varchar("provider", { length: 40 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("assets_ws_kind").on(t.workspaceId, t.kind), index("assets_post").on(t.postId)],
+);
+
 // Simple database job queue (no Redis needed in Phase 1).
 export const jobs = pgTable(
   "jobs",
@@ -206,3 +238,4 @@ export type Campaign = typeof campaigns.$inferSelect;
 export type Post = typeof posts.$inferSelect;
 export type Generation = typeof generations.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
+export type Asset = typeof assets.$inferSelect;

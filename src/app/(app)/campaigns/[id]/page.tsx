@@ -1,18 +1,34 @@
 import { notFound } from "next/navigation";
-import { editPostAction, retryCampaignAction, reviewPostAction, rewritePostAction } from "@/app/actions/campaigns";
+import {
+  editPostAction,
+  editPosterTextAction,
+  redesignPostAction,
+  retryCampaignAction,
+  reviewPostAction,
+  rewritePostAction,
+} from "@/app/actions/campaigns";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import { StatusBadge } from "@/components/status-badge";
 import { requireAuth } from "@/lib/auth";
-import { getBrand, getCampaign, listCampaignPosts } from "@/lib/data";
+import { getBrand, getCampaign, latestPosters, listCampaignPosts } from "@/lib/data";
+import { publicUrl } from "@/lib/storage";
+
+const TEMPLATE_LABELS: Record<string, string> = { band: "Bottom band", top: "Top headline", center: "Centre card" };
 
 export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
   const { workspace, role } = await requireAuth();
   const { id } = await params;
   const campaign = await getCampaign(workspace.id, Number(id));
   if (!campaign) notFound();
-  const [brand, posts] = await Promise.all([getBrand(workspace.id, campaign.brandId), listCampaignPosts(workspace.id, campaign.id)]);
-  const working = campaign.status === "planning" || campaign.status === "writing" || campaign.status === "draft" || posts.some((p) => p.status === "idea");
+  const [brand, posts, posters] = await Promise.all([
+    getBrand(workspace.id, campaign.brandId),
+    listCampaignPosts(workspace.id, campaign.id),
+    latestPosters(workspace.id, campaign.id),
+  ]);
+  const designing = posts.filter((p) => p.status !== "idea" && (p.designStatus === "designing" || (campaign.status === "ready" && p.designStatus === "none")));
+  const working =
+    campaign.status === "planning" || campaign.status === "writing" || campaign.status === "draft" || posts.some((p) => p.status === "idea") || designing.length > 0;
   const canEdit = role !== "client";
   const drafted = posts.filter((p) => p.status !== "idea").length;
 
@@ -41,7 +57,13 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       {campaign.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{campaign.error}</p>}
       {working && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          The agent is working{posts.length ? `: ${drafted} of ${posts.length} posts written` : ": planning the calendar"}. This page updates by itself.
+          The agent is working
+          {!posts.length
+            ? ": planning the calendar"
+            : drafted < posts.length
+              ? `: ${drafted} of ${posts.length} posts written`
+              : `: designing posters (${posts.length - designing.length} of ${posts.length} done)`}
+          . This page updates by itself.
         </p>
       )}
       {campaign.strategy && (
@@ -65,7 +87,58 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
             {post.status === "idea" ? (
               <p className="text-sm text-zinc-500">Writing…</p>
             ) : (
-              <>
+              <div className="grid gap-5 md:grid-cols-[280px_1fr]">
+                <div className="space-y-2">
+                  {posters.get(post.id) && post.designStatus !== "designing" ? (
+                    <a href={publicUrl(posters.get(post.id)!.storageKey)} target="_blank" rel="noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={publicUrl(posters.get(post.id)!.storageKey)}
+                        alt={post.posterHeadline ?? "Poster"}
+                        className="w-full rounded-lg border border-zinc-200"
+                      />
+                    </a>
+                  ) : (
+                    <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-zinc-300 text-sm text-zinc-500">
+                      {post.designStatus === "failed" ? "Design failed — try again" : "Designing poster…"}
+                    </div>
+                  )}
+                  {canEdit && (
+                    <>
+                      <form action={editPosterTextAction.bind(null, post.id)} className="space-y-1.5">
+                        <input className="input" name="posterHeadline" defaultValue={post.posterHeadline ?? ""} placeholder="Poster headline" />
+                        <div className="flex gap-1.5">
+                          <input className="input" name="posterCta" defaultValue={post.posterCta ?? ""} placeholder="Button text" />
+                          <button className="btn-secondary shrink-0">Update</button>
+                        </div>
+                      </form>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(TEMPLATE_LABELS).map(([value, label]) => (
+                          <form key={value} action={redesignPostAction.bind(null, post.id, { template: value })}>
+                            <button
+                              className={`badge border ${post.posterTemplate === value ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 bg-white text-zinc-600"}`}
+                            >
+                              {label}
+                            </button>
+                          </form>
+                        ))}
+                        <form action={redesignPostAction.bind(null, post.id, { newBackground: true })}>
+                          <button className="badge border border-zinc-200 bg-white text-zinc-600">New image</button>
+                        </form>
+                        {posters.get(post.id) && (
+                          <a
+                            href={publicUrl(posters.get(post.id)!.storageKey)}
+                            download={`post-${post.id}-${post.platform}.png`}
+                            className="badge border border-zinc-200 bg-white text-zinc-600"
+                          >
+                            Download
+                          </a>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="space-y-3">
                 <form action={editPostAction.bind(null, post.id)} className="space-y-2">
                   <textarea className="input" name="caption" rows={5} defaultValue={post.caption ?? ""} readOnly={!canEdit} />
                   <input className="input" name="hashtags" defaultValue={post.hashtags.join(" ")} readOnly={!canEdit} />
@@ -91,7 +164,8 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                     </form>
                   )}
                 </div>
-              </>
+                </div>
+              </div>
             )}
           </article>
         ))}

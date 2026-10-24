@@ -7,11 +7,12 @@ import { PLATFORM_LABELS } from "@/lib/platforms";
 
 type Props = {
   brand?: Brand;
+  logoUrl?: string | null;
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
   submitLabel: string;
 };
 
-export function BrandForm({ brand, action, submitLabel }: Props) {
+export function BrandForm({ brand, logoUrl, action, submitLabel }: Props) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
   const join = (v?: string[] | null) => (v ?? []).join(", ");
 
@@ -47,6 +48,19 @@ export function BrandForm({ brand, action, submitLabel }: Props) {
 
       <section className="card grid gap-4 md:grid-cols-2">
         <h2 className="font-semibold md:col-span-2">Brand Kit</h2>
+        <div className="flex items-center gap-4 md:col-span-2">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt="Logo" className="h-16 w-16 rounded-lg border border-zinc-200 bg-white object-contain p-1" />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-zinc-300 text-xs text-zinc-400">Logo</div>
+          )}
+          <div>
+            <label className="label" htmlFor="logo">Logo</label>
+            <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="text-sm" />
+            <p className="hint">PNG with transparent background works best. Max 2 MB. Printed on every poster.</p>
+          </div>
+        </div>
         <div>
           <label className="label" htmlFor="tone">Tone of voice</label>
           <input className="input" id="tone" name="tone" defaultValue={brand?.tone ?? ""} placeholder="Warm, festive, trustworthy" />

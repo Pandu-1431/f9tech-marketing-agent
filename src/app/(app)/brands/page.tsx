@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { freePlan } from "@/lib/config";
 import { listBrands } from "@/lib/data";
+import { publicUrl } from "@/lib/storage";
 
 export default async function BrandsPage() {
   const { workspace } = await requireAuth();
@@ -31,7 +32,13 @@ export default async function BrandsPage() {
           {brands.map((b) => (
             <Link key={b.id} href={`/brands/${b.id}`} className="card block hover:border-indigo-300">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold">{b.name}</h2>
+                <h2 className="flex items-center gap-2 font-semibold">
+                  {b.logoKey && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={publicUrl(b.logoKey)} alt="" className="h-8 w-8 rounded border border-zinc-200 bg-white object-contain" />
+                  )}
+                  {b.name}
+                </h2>
                 <div className="flex gap-1">
                   {b.colors.slice(0, 5).map((c) => (
                     <span key={c} className="h-4 w-4 rounded-full border border-zinc-200" style={{ background: c }} title={c} />

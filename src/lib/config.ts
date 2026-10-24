@@ -23,6 +23,8 @@ export function freePlan() {
     maxBrands: num(process.env.AGENT_MAX_BRANDS, 4),
     maxPostsPerCampaign: num(process.env.AGENT_MAX_POSTS_PER_CAMPAIGN, 30),
     monthlyTextGenerations: num(process.env.AGENT_MONTHLY_TEXT_GENERATIONS, 600),
+    monthlyImageGenerations: num(process.env.AGENT_MONTHLY_IMAGE_GENERATIONS, 200),
+    trialDays: num(process.env.AGENT_TRIAL_DAYS, 21),
   };
 }
 
@@ -91,4 +93,55 @@ export function providerConfig(name: string): ProviderConfig | null {
 
 export function httpTimeoutMs(): number {
   return num(process.env.AGENT_HTTP_TIMEOUT_MS, 90_000);
+}
+
+// ---------- Image providers ----------
+
+export type ImageProviderConfig = {
+  name: string;
+  driver: "cloudflare" | "huggingface" | "pollinations" | "fake";
+  apiKey?: string;
+  accountId?: string;
+  model: string;
+  dailyLimit: number;
+};
+
+export function imageChain(): string[] {
+  return (process.env.AGENT_IMAGE_CHAIN ?? "cloudflare,huggingface,fake")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function imageProviderConfig(name: string): ImageProviderConfig | null {
+  const e = process.env;
+  switch (name) {
+    case "cloudflare":
+      // Cloudflare Workers AI free daily allowance: https://dash.cloudflare.com -> AI -> Workers AI
+      return {
+        name,
+        driver: "cloudflare",
+        apiKey: e.CLOUDFLARE_API_TOKEN,
+        accountId: e.CLOUDFLARE_ACCOUNT_ID,
+        model: e.CLOUDFLARE_IMAGE_MODEL ?? "@cf/black-forest-labs/flux-1-schnell",
+        dailyLimit: num(e.CLOUDFLARE_IMAGE_DAILY_LIMIT, 100),
+      };
+    case "huggingface":
+      // Hugging Face Inference (free monthly credits): https://huggingface.co/settings/tokens
+      return {
+        name,
+        driver: "huggingface",
+        apiKey: e.HF_TOKEN,
+        model: e.HF_IMAGE_MODEL ?? "black-forest-labs/FLUX.1-schnell",
+        dailyLimit: num(e.HF_IMAGE_DAILY_LIMIT, 50),
+      };
+    case "pollinations":
+      // No key. Fine for internal tests; check its terms before selling to customers.
+      return { name, driver: "pollinations", model: e.POLLINATIONS_MODEL ?? "flux", dailyLimit: num(e.POLLINATIONS_DAILY_LIMIT, 100) };
+    case "fake":
+      // Always works offline: brand-colour gradient background.
+      return { name, driver: "fake", model: "gradient-1", dailyLimit: 1_000_000 };
+    default:
+      return null;
+  }
 }

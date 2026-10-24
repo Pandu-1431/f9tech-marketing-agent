@@ -3,6 +3,7 @@ import { deleteBrandAction, updateBrandAction } from "@/app/actions/brands";
 import { BrandForm } from "@/components/brand-form";
 import { requireEditor } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
+import { publicUrl } from "@/lib/storage";
 
 export default async function EditBrandPage({ params }: { params: Promise<{ id: string }> }) {
   const { workspace } = await requireEditor();
@@ -18,7 +19,7 @@ export default async function EditBrandPage({ params }: { params: Promise<{ id: 
           <button className="btn-danger">Delete</button>
         </form>
       </div>
-      <BrandForm brand={brand} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" />
+      <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" />
     </div>
   );
 }

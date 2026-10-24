@@ -35,6 +35,12 @@ The app stores data in an embedded Postgres (PGlite) in `./.data` when `DATABASE
 | `npm run worker` | Background job worker (production, needs Postgres) |
 | `npm run db:generate` | Create a migration after changing `src/db/schema.ts` |
 
+## Data storage (Supabase)
+
+- **Database:** set `DATABASE_URL` to the Supabase *Session pooler* connection string. Tables are created automatically on start.
+- **Files:** create a public bucket `media`, create S3 access keys (Storage → Settings → S3 Connection), then set `STORAGE_DRIVER=s3` and the `S3_*` values from `.env.example`.
+- Supabase free tier: 500 MB database, 1 GB file storage; free projects pause after a week without activity.
+
 ## Production (DigitalOcean droplet)
 
 1. Create a Postgres database and set `DATABASE_URL=postgres://...`.
@@ -77,7 +83,7 @@ tests/                 vitest: tenant isolation, limits, router, pipeline
 
 - [x] Layer 1 — accounts, workspaces, business accounts (Brand Kit), free limits
 - [x] Layer 2 — Model Router (Gemini, Groq, OpenRouter, local), campaign planner, copywriter, review/approve
-- [ ] Layer 3 — images (Brand Kit visuals, free image models) + asset library
+- [x] Layer 3 — Design studio: logo upload, AI backgrounds (Cloudflare / Hugging Face / offline), poster templates with logo + headline + button, per-platform sizes, asset library, 21-day free trial
 - [ ] Layer 4 — SEO + SMO: keyword/trend suggestions, hashtag sets, best time to post, Google Business Profile posts
 - [ ] Layer 5 — tracking: in-app tracker + Google Sheet sync per business account
 - [ ] Layer 6 — publishing to Facebook + Instagram (Meta Graph API), analytics pull
