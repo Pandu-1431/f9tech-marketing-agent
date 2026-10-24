@@ -79,3 +79,58 @@ export async function pendingJobCount(workspaceId: number): Promise<number> {
     .where(and(eq(schema.jobs.workspaceId, workspaceId), sql`${schema.jobs.status} in ('queued','running')`));
   return rows.length;
 }
+
+/** Put jobs stuck in "running" (e.g. the server stopped mid-job) back in the queue. */
+export async function recoverStaleJobs(olderThanMinutes = 10, before?: Date): Promise<number> {
+  const db = await getDb();
+  const cutoff = before ?? new Date(Date.now() - olderThanMinutes * 60_000);
+  const result = await db.execute(sql`
+    UPDATE ${schema.jobs}
+    SET status = 'queued', updated_at = now(), run_after = now()
+    WHERE status = 'running' AND updated_at < ${cutoff.toISOString()}::timestamptz
+    RETURNING id
+  `);
+  return ((result as unknown as { rows: unknown[] }).rows ?? []).length;
+}
+
+/** Latest unresolved problem for a campaign's jobs (shown on the campaign page). */
+export async function campaignJobProblem(workspaceId: number, campaignId: number): Promise<{ error: string; attempts: number; status: string } | null> {
+  const db = await getDb();
+  const result = await db.execute(sql`
+    SELECT error, attempts, status FROM ${schema.jobs}
+    WHERE workspace_id = ${workspaceId}
+      AND (payload->>'campaignId')::int = ${campaignId}
+      AND error IS NOT NULL AND status IN ('queued','failed')
+    ORDER BY id DESC LIMIT 1
+  `);
+  const row = (result as unknown as { rows: { error: string; attempts: number; status: string }[] }).rows?.[0];
+  return row ?? null;
+}
+
+/*
+ * Built-in background worker for single-server mode (AGENT_INLINE_JOBS=true):
+ * checks the queue every few seconds, so retries and leftover jobs always run,
+ * even when nobody clicks anything.
+ */
+const g = globalThis as unknown as { __agentWorker?: boolean };
+export function startInlineWorker(everyMs = 3000) {
+  if (g.__agentWorker) return;
+  g.__agentWorker = true;
+  let busy = false;
+  let first = true;
+  const startedAt = new Date();
+  setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      // On server start, anything marked "running" was interrupted: requeue it now.
+      await recoverStaleJobs(10, first ? startedAt : undefined);
+      first = false;
+      await processJobs(20);
+    } catch (err) {
+      console.error("[agent worker]", err);
+    } finally {
+      busy = false;
+    }
+  }, everyMs);
+}

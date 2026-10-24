@@ -14,6 +14,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { requireAuth } from "@/lib/auth";
 import { getBrand, getCampaign, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
+import { campaignJobProblem } from "@/jobs/queue";
 
 const TEMPLATE_LABELS: Record<string, string> = { band: "Bottom band", top: "Top headline", center: "Centre card" };
 
@@ -29,6 +30,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     latestVideos(workspace.id, campaign.id),
   ]);
   const makingVideos = posts.filter((p) => p.reelStatus === "making").length;
+  const problem = await campaignJobProblem(workspace.id, campaign.id);
   const designing = posts.filter((p) => p.status !== "idea" && (p.designStatus === "designing" || (campaign.status === "ready" && p.designStatus === "none")));
   const working =
     campaign.status === "planning" || campaign.status === "writing" || campaign.status === "draft" || posts.some((p) => p.status === "idea") || designing.length > 0 || makingVideos > 0;
@@ -58,6 +60,12 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       </div>
 
       {campaign.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{campaign.error}</p>}
+      {problem && !campaign.error && (
+        <p className={`rounded-lg px-3 py-2 text-sm ${problem.status === "failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+          {problem.status === "failed" ? "Stopped after 3 tries: " : `Hit a problem, retrying automatically (try ${problem.attempts} of 3): `}
+          {problem.error.slice(0, 300)}
+        </p>
+      )}
       {working && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
           The agent is working
