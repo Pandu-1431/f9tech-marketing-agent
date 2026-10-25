@@ -94,8 +94,18 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
               <span className="badge bg-zinc-100 text-zinc-700">{PLATFORM_LABELS[post.platform] ?? post.platform}</span>
               <span className="badge bg-zinc-100 text-zinc-700">{post.format}</span>
               <StatusBadge status={post.status} />
+              {post.demoParts.length > 0 && (
+                <span data-testid="demo-badge" className="badge bg-amber-400 font-bold uppercase tracking-wide text-black">Demo content</span>
+              )}
               <span className="ml-auto text-xs text-zinc-500">{post.angle}</span>
             </header>
+            {post.demoParts.length > 0 && post.status !== "idea" && (
+              <p data-testid="demo-notice" className="rounded-lg border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <b>Demo content — not made by a real AI model.</b> {demoPartsText(post.demoParts)} came from the built-in demo
+                generator. It cannot be approved or published. Add a real AI key on the AI connections page and use “Rewrite with AI”
+                or “New image”, or edit the caption yourself.
+              </p>
+            )}
 
             {post.status === "idea" ? (
               <p className="text-sm text-zinc-500">Writing…</p>
@@ -103,13 +113,14 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
               <div className="grid gap-5 md:grid-cols-[280px_1fr]">
                 <div className="space-y-2">
                   {posters.get(post.id) && post.designStatus !== "designing" ? (
-                    <a href={publicUrl(posters.get(post.id)!.storageKey)} target="_blank" rel="noreferrer">
+                    <a href={publicUrl(posters.get(post.id)!.storageKey)} target="_blank" rel="noreferrer" className="relative block">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={publicUrl(posters.get(post.id)!.storageKey)}
                         alt={post.posterHeadline ?? "Poster"}
                         className="w-full rounded-lg border border-zinc-200"
                       />
+                      {posters.get(post.id)!.demo && <DemoStamp />}
                     </a>
                   ) : (
                     <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-zinc-300 text-sm text-zinc-500">
@@ -157,7 +168,8 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                         Making video… script → images → voice → video
                       </div>
                     ) : videos.get(post.id) ? (
-                      <>
+                      <div className="relative">
+                        {videos.get(post.id)!.demo && <DemoStamp />}
                         <video
                           src={publicUrl(videos.get(post.id)!.storageKey)}
                           poster={posters.get(post.id) ? publicUrl(posters.get(post.id)!.storageKey) : undefined}
@@ -170,7 +182,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                           {post.reelScript?.durationSec ? `${post.reelScript.durationSec}s · ` : ""}
                           {post.reelScript?.scenes.length ?? 0} scenes · voice: {post.reelScript?.voice ?? "—"}
                         </p>
-                      </>
+                      </div>
                     ) : (
                       post.reelStatus === "failed" && <p className="text-xs text-red-600">{post.reelError ?? "Video failed"}</p>
                     )}
@@ -216,7 +228,13 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
                 <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3">
                   <form action={reviewPostAction.bind(null, post.id, "approved")} className="flex gap-2">
-                    <button className="btn">Approve</button>
+                    <button
+                      className="btn"
+                      disabled={post.demoParts.length > 0}
+                      title={post.demoParts.length > 0 ? "Demo content cannot be approved" : undefined}
+                    >
+                      Approve
+                    </button>
                   </form>
                   <form action={reviewPostAction.bind(null, post.id, "rejected")} className="flex flex-1 gap-2">
                     <input className="input" name="note" placeholder="What should change? (optional)" defaultValue={post.reviewNote ?? ""} />
@@ -235,5 +253,24 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         ))}
       </div>
     </div>
+  );
+}
+
+function demoPartsText(parts: string[]): string {
+  const names: Record<string, string> = { text: "The caption", image: "The poster image", video: "The reel video" };
+  const list = parts.map((p) => names[p] ?? p);
+  if (list.length <= 1) return list.join("");
+  return `${list.slice(0, -1).join(", ")} and ${list.at(-1)!.toLowerCase()}`;
+}
+
+/** Diagonal stamp over a demo poster or video so it can't be mistaken for real output. */
+function DemoStamp() {
+  return (
+    <span
+      data-testid="demo-stamp"
+      className="pointer-events-none absolute left-2 top-2 z-10 rounded-md border-2 border-black bg-amber-400 px-2 py-0.5 text-xs font-black uppercase tracking-widest text-black shadow"
+    >
+      Demo · not real AI
+    </span>
   );
 }

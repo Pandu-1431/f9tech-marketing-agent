@@ -36,7 +36,7 @@ export class CloudflareImageProvider implements ImageProvider {
   }
   async generate(req: ImageRequest): Promise<ImageResult> {
     if (!this.cfg.apiKey || !this.cfg.accountId) throw new ProviderError("cloudflare: missing token or account id");
-    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${this.cfg.accountId}/ai/run/${this.model}`, {
+    const res = await fetch(`${this.cfg.baseUrl ?? "https://api.cloudflare.com/client/v4"}/accounts/${this.cfg.accountId}/ai/run/${this.model}`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.cfg.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({ prompt: req.prompt, steps: 4, seed: req.seed }),

@@ -43,3 +43,8 @@ next-env.d.ts
 # local embedded database
 /.data
 !.env.example
+
+# browser test output
+/playwright-report/
+/test-results/
+/blob-report/

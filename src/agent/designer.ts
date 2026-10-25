@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import type { Brand, Post } from "@/db/schema";
 import { getFile, newKey, putFile } from "@/lib/storage";
+import { isDemoProvider, setDemoPart } from "@/lib/data";
 import { generateImage } from "./images/router";
 import { composePoster, posterSize, POSTER_TEMPLATES, type PosterTemplate } from "./images/poster";
 
@@ -26,6 +27,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
 
   // Reuse the existing background when only the template or text changes.
   let background: Buffer | null = null;
+  let backgroundProvider: string | null = null;
   if (!opts.newBackground) {
     const [bgAsset] = await db
       .select()
@@ -33,7 +35,10 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
       .where(and(eq(schema.assets.workspaceId, post.workspaceId), eq(schema.assets.postId, post.id), eq(schema.assets.kind, "background")))
       .orderBy(desc(schema.assets.id))
       .limit(1);
-    if (bgAsset) background = await getFile(bgAsset.storageKey);
+    if (bgAsset) {
+      background = await getFile(bgAsset.storageKey);
+      backgroundProvider = bgAsset.provider;
+    }
   }
 
   if (!background) {
@@ -42,6 +47,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
       { prompt: backgroundPrompt(brand, post), width, height, colors: brand.colors, seed: post.id },
     );
     background = img.data;
+    backgroundProvider = img.provider;
     const key = newKey(post.workspaceId, "background", img.mime);
     await putFile(key, img.data, img.mime);
     await db.insert(schema.assets).values({
@@ -56,6 +62,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
       bytes: img.data.length,
       prompt: backgroundPrompt(brand, post),
       provider: img.provider,
+      demo: isDemoProvider(img.provider),
     });
   }
 
@@ -73,6 +80,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
     footer: [brand.name, brand.city].filter(Boolean).join(" · "),
   });
 
+  const demoImage = isDemoProvider(backgroundProvider);
   const key = newKey(post.workspaceId, "poster", "image/png");
   await putFile(key, poster, "image/png");
   const [asset] = await db
@@ -88,6 +96,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
       height,
       bytes: poster.length,
       provider: "composer",
+      demo: demoImage,
     })
     .returning();
 
@@ -95,5 +104,6 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
     .update(schema.posts)
     .set({ designStatus: "done", posterTemplate: template, updatedAt: new Date() })
     .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
+  await setDemoPart(post.workspaceId, post.id, "image", demoImage);
   return asset;
 }

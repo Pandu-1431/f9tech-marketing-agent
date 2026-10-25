@@ -41,12 +41,17 @@ export function reelPrompt(campaign: Campaign, post: Post): string {
 
 /** Post -> reel script (scenes with voiceover, on-screen text and image prompts). */
 export async function writeReelScript(campaign: Campaign, brand: Brand, post: Post): Promise<ReelScript> {
+  return (await writeReelScriptWithProvider(campaign, brand, post)).script;
+}
+
+/** Same as writeReelScript, plus which text provider wrote it (to label demo output). */
+export async function writeReelScriptWithProvider(campaign: Campaign, brand: Brand, post: Post): Promise<{ script: ReelScript; provider: string }> {
   const out = await generateText(
     { workspaceId: post.workspaceId, brandId: brand.id, purpose: "reel_script", subject: { type: "post", id: post.id } },
     { system: brandSystemPrompt(brand), prompt: reelPrompt(campaign, post), json: true, temperature: 0.8 },
   );
   const s = schema.parse(parseJsonObject(out.text));
-  return {
+  const script: ReelScript = {
     title: s.title || campaign.theme,
     scenes: s.scenes.slice(0, 6).map((sc) => ({
       voiceover: sc.voiceover.trim(),
@@ -55,4 +60,5 @@ export async function writeReelScript(campaign: Campaign, brand: Brand, post: Po
     })),
     cta: (s.cta || post.posterCta || "Order now").slice(0, 40),
   };
+  return { script, provider: out.provider };
 }

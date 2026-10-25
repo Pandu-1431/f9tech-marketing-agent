@@ -22,6 +22,20 @@
       "when": 1792852194437,
       "tag": "0002_video_studio",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792907878391,
+      "tag": "0003_login_throttle",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792908049605,
+      "tag": "0004_demo_labels",
+      "breakpoints": true
     }
   ]
 }

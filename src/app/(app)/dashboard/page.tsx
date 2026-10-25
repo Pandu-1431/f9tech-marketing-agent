@@ -49,9 +49,17 @@ export default async function DashboardPage() {
         <Meter label="AI images this month" used={imagesUsed} max={plan.monthlyImageGenerations} />
         <Meter label="Reel videos this month" used={videosUsed} max={plan.monthlyVideos} />
         <div className="card">
-          <p className="text-sm text-zinc-500">Free trial</p>
+          <p className="text-sm text-zinc-500">{trial.enabled ? "Free trial" : "Plan"}</p>
           <p className="mt-1 text-2xl font-semibold">
-            {trial.daysLeft} <span className="text-base font-normal text-zinc-400">days left</span>
+            {trial.enabled ? (
+              <>
+                {trial.daysLeft} <span className="text-base font-normal text-zinc-400">days left</span>
+              </>
+            ) : (
+              <>
+                Free <span className="text-base font-normal text-zinc-400">no expiry</span>
+              </>
+            )}
           </p>
           <p className="mt-1 text-xs text-zinc-500">
             {counts.drafted ?? 0} posts to review · {counts.approved ?? 0} approved

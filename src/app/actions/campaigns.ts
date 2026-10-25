@@ -7,11 +7,14 @@ import { z } from "zod";
 import { requireAuth, requireEditor } from "@/lib/auth";
 import {
   createCampaign,
+  DemoContentError,
   getCampaign,
   getPost,
   LimitError,
   listCampaignPosts,
+  reviewPost,
   setCampaignStatus,
+  setDemoPart,
   updatePost,
 } from "@/lib/data";
 import { enqueue, processJobs } from "@/jobs/queue";
@@ -74,7 +77,12 @@ export async function reviewPostAction(postId: number, decision: "approved" | "r
   const post = await getPost(workspace.id, postId);
   if (!post) return;
   const note = String(formData.get("note") ?? "").trim() || null;
-  await updatePost(workspace.id, postId, { status: decision, reviewNote: note });
+  try {
+    await reviewPost(workspace.id, postId, decision, note);
+  } catch (err) {
+    // Demo content: the button is disabled in the UI; this is the server-side guard.
+    if (!(err instanceof DemoContentError)) throw err;
+  }
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
 
@@ -93,6 +101,8 @@ export async function editPostAction(postId: number, formData: FormData) {
     imagePrompt: String(formData.get("imagePrompt") ?? "").trim(),
     status: "drafted",
   });
+  // A person wrote or checked this caption, so it is no longer demo text.
+  await setDemoPart(workspace.id, postId, "text", false);
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
 

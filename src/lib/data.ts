@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import type { NewBrand } from "@/db/schema";
 import { freePlan } from "./config";
@@ -150,6 +150,42 @@ export async function updatePost(
     .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, id)))
     .returning();
   return row ?? null;
+}
+
+// ---------- Demo content ----------
+
+/** Provider names of the built-in demo generators (no real AI). */
+export const DEMO_PROVIDERS = new Set(["fake"]);
+export const isDemoProvider = (provider: string | null | undefined) => Boolean(provider && DEMO_PROVIDERS.has(provider));
+
+export type DemoPart = "text" | "image" | "video";
+
+/** Adds or removes one demo marker on a post (atomic, keeps the other markers). */
+export async function setDemoPart(workspaceId: number, postId: number, part: DemoPart, on: boolean) {
+  const db = await getDb();
+  await db
+    .update(schema.posts)
+    .set({
+      demoParts: on
+        ? sql`(SELECT COALESCE(jsonb_agg(DISTINCT x), '[]'::jsonb) FROM jsonb_array_elements_text(${schema.posts.demoParts} || ${JSON.stringify([part])}::jsonb) AS x)`
+        : sql`${schema.posts.demoParts} - ${part}::text`,
+    })
+    .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId)));
+}
+
+export class DemoContentError extends Error {
+  constructor() {
+    super("This post contains demo content (not made by a real AI model) and cannot be approved. Regenerate it with a real AI provider, or edit the caption yourself.");
+    this.name = "DemoContentError";
+  }
+}
+
+/** Approve or reject a post. Approval is refused while any part is demo content. */
+export async function reviewPost(workspaceId: number, postId: number, decision: "approved" | "rejected", note: string | null) {
+  const post = await getPost(workspaceId, postId);
+  if (!post) return null;
+  if (decision === "approved" && post.demoParts.length > 0) throw new DemoContentError();
+  return updatePost(workspaceId, postId, { status: decision, reviewNote: note });
 }
 
 // ---------- Dashboard ----------

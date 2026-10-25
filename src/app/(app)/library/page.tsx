@@ -29,7 +29,12 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {assets.map(({ asset, brandName }) => (
-            <div key={asset.id} className="card p-2">
+            <div key={asset.id} className="card relative p-2">
+              {asset.demo && (
+                <span data-testid="demo-stamp" className="absolute left-3 top-3 z-10 rounded-md border-2 border-black bg-amber-400 px-2 py-0.5 text-xs font-black uppercase tracking-widest text-black">
+                  Demo
+                </span>
+              )}
               {asset.kind === "video" ? (
                 <video src={publicUrl(asset.storageKey)} controls preload="metadata" playsInline className="aspect-[9/16] w-full rounded-md bg-black" />
               ) : (

@@ -8,7 +8,7 @@ import { designPost } from "@/agent/designer";
 import { makeReel } from "@/agent/video/reel";
 import type { PosterTemplate } from "@/agent/images/poster";
 import { TrialEndedError } from "@/lib/plan";
-import { getBrand, getCampaign, setCampaignStatus, updatePost } from "@/lib/data";
+import { getBrand, getCampaign, setCampaignStatus, setDemoPart, updatePost } from "@/lib/data";
 
 type Payload = Record<string, unknown>;
 type Handler = ((payload: Payload) => Promise<void>) & {
@@ -77,8 +77,9 @@ const writeCampaignJob: Handler = async (payload) => {
     }
     for (const post of batch) {
       try {
-        const copy = written.get(post.id) ?? (await writePostCopy(campaign, brand, post));
+        const { demo, ...copy } = written.get(post.id) ?? (await writePostCopy(campaign, brand, post));
         await updatePost(workspaceId, post.id, { ...copy, status: "drafted" });
+        await setDemoPart(workspaceId, post.id, "text", demo);
       } catch (err) {
         if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
           limitError = err;
@@ -120,8 +121,9 @@ const rewritePostJob: Handler = async (payload) => {
   const brand = await getBrand(workspaceId, post.brandId);
   if (!campaign || !brand) throw permanent("Campaign or brand not found");
   try {
-    const copy = await writePostCopy(campaign, brand, post);
+    const { demo, ...copy } = await writePostCopy(campaign, brand, post);
     await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null, designStatus: "designing" });
+    await setDemoPart(workspaceId, post.id, "text", demo);
     const fresh = { ...post, ...copy, status: "drafted" };
     await designPost(fresh, brand);
   } catch (err) {

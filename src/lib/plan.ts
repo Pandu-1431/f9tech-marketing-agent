@@ -1,15 +1,24 @@
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
+import { freePlan } from "@/lib/config";
 
-/** Thrown when a workspace's free trial is over (Phase 2 adds paid plans). */
+/** Thrown when a workspace's free trial is over (only when AGENT_TRIAL_DAYS > 0). */
 export class TrialEndedError extends Error {
   constructor() {
-    super("Your 3-week free trial has ended. Upgrade to keep generating content.");
+    super("Your free trial has ended. Your content is safe, but new AI generation is paused.");
     this.name = "TrialEndedError";
   }
 }
 
-export type TrialInfo = { endsAt: Date; daysLeft: number; active: boolean; plan: string };
+/**
+ * enabled = false when AGENT_TRIAL_DAYS=0 (the default): no expiry at all.
+ * Monthly usage limits are separate and always apply.
+ */
+export type TrialInfo = { enabled: boolean; endsAt: Date | null; daysLeft: number | null; active: boolean; plan: string };
+
+export function trialEnabled(): boolean {
+  return freePlan().trialDays > 0;
+}
 
 export async function trialInfo(workspaceId: number): Promise<TrialInfo> {
   const db = await getDb();
@@ -17,14 +26,18 @@ export async function trialInfo(workspaceId: number): Promise<TrialInfo> {
     .select({ trialEndsAt: schema.workspaces.trialEndsAt, plan: schema.workspaces.plan })
     .from(schema.workspaces)
     .where(eq(schema.workspaces.id, workspaceId));
+  const plan = ws?.plan ?? "free";
+  if (!trialEnabled()) return { enabled: false, endsAt: null, daysLeft: null, active: true, plan };
+
   const endsAt = ws?.trialEndsAt ?? new Date(0);
   const msLeft = endsAt.getTime() - Date.now();
-  const paid = ws?.plan && ws.plan !== "free" && ws.plan !== "trial";
+  const paid = plan !== "free" && plan !== "trial";
   return {
+    enabled: true,
     endsAt,
     daysLeft: Math.max(0, Math.ceil(msLeft / 86400000)),
-    active: Boolean(paid) || msLeft > 0,
-    plan: ws?.plan ?? "free",
+    active: paid || msLeft > 0,
+    plan,
   };
 }
 

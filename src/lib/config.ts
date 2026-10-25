@@ -24,7 +24,8 @@ export function freePlan() {
     maxPostsPerCampaign: num(process.env.AGENT_MAX_POSTS_PER_CAMPAIGN, 30),
     monthlyTextGenerations: num(process.env.AGENT_MONTHLY_TEXT_GENERATIONS, 600),
     monthlyImageGenerations: num(process.env.AGENT_MONTHLY_IMAGE_GENERATIONS, 200),
-    trialDays: num(process.env.AGENT_TRIAL_DAYS, 21),
+    // 0 (default) = no trial expiry; usage limits below still apply.
+    trialDays: Math.max(0, num(process.env.AGENT_TRIAL_DAYS, 0)),
     monthlyVideos: num(process.env.AGENT_MONTHLY_VIDEOS, 30),
   };
 }
@@ -105,6 +106,7 @@ export type ImageProviderConfig = {
   accountId?: string;
   model: string;
   dailyLimit: number;
+  baseUrl?: string;
 };
 
 export function imageChain(): string[] {
@@ -126,6 +128,8 @@ export function imageProviderConfig(name: string): ImageProviderConfig | null {
         accountId: e.CLOUDFLARE_ACCOUNT_ID,
         model: e.CLOUDFLARE_IMAGE_MODEL ?? "@cf/black-forest-labs/flux-1-schnell",
         dailyLimit: num(e.CLOUDFLARE_IMAGE_DAILY_LIMIT, 100),
+        // Only changed by automated tests, which point it at a local stub server.
+        baseUrl: e.CLOUDFLARE_BASE_URL ?? "https://api.cloudflare.com/client/v4",
       };
     case "huggingface":
       // Hugging Face Inference (free monthly credits): https://huggingface.co/settings/tokens

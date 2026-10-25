@@ -9,6 +9,7 @@ import {
   date,
   jsonb,
   numeric,
+  boolean,
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
@@ -150,6 +151,9 @@ export const posts = pgTable(
     reelStatus: varchar("reel_status", { length: 12 }).default("none").notNull(),
     reelScript: jsonb("reel_script").$type<ReelScript | null>(),
     reelError: text("reel_error"),
+    // Which parts were made by the built-in demo generator (not real AI): "text" | "image" | "video".
+    // A post with any demo part cannot be approved.
+    demoParts: jsonb("demo_parts").$type<string[]>().default([]).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -214,6 +218,8 @@ export const assets = pgTable(
     bytes: integer("bytes").default(0).notNull(),
     prompt: text("prompt"),
     provider: varchar("provider", { length: 40 }),
+    // true = made (fully or partly) by the demo generator; shown with a DEMO label.
+    demo: boolean("demo").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("assets_ws_kind").on(t.workspaceId, t.kind), index("assets_post").on(t.postId)],
@@ -235,6 +241,21 @@ export const jobs = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("jobs_status_run_after").on(t.status, t.runAfter)],
+);
+
+// Failed sign-in counters for throttling. `key` is a SHA-256 hash of "email:<address>"
+// or "ip:<address>", so raw emails and IPs are not stored. No passwords are ever stored here.
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: serial("id").primaryKey(),
+    key: varchar("key", { length: 80 }).notNull(),
+    failures: integer("failures").default(0).notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).defaultNow().notNull(),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("login_attempts_key").on(t.key)],
 );
 
 export type User = typeof users.$inferSelect;

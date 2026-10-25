@@ -58,7 +58,7 @@ export function CampaignForm({ brands, today }: { brands: BrandOption[]; today: 
         </div>
       </fieldset>
 
-      {state?.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
+      {state?.error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
       <button className="btn" disabled={pending}>{pending ? "Starting…" : "Plan and write campaign"}</button>
       <p className="hint">The agent plans the calendar first, then writes every post. This takes a minute or two.</p>
     </form>

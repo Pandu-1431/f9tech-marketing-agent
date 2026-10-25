@@ -10,7 +10,8 @@ import { generateImage } from "../images/router";
 import { QuotaExceededError } from "../router";
 import { renderSceneFrame, REEL_H, REEL_W } from "./frames";
 import { ffmpeg, tempDir, wavDurationSec } from "./ffmpeg";
-import { writeReelScript } from "./script";
+import { writeReelScriptWithProvider } from "./script";
+import { isDemoProvider, setDemoPart } from "@/lib/data";
 import { speak } from "./voice";
 import { mapLimit, parallelism } from "@/lib/concurrency";
 
@@ -69,12 +70,13 @@ export async function buildReelVideo(input: {
   brand: Brand;
   postId: number;
   script: ReelScript;
-}): Promise<{ mp4: Buffer; durationSec: number; voiceProvider: string }> {
+}): Promise<{ mp4: Buffer; durationSec: number; voiceProvider: string; demoImages: boolean }> {
   const { workspaceId, brand, postId, script } = input;
   const dir = await tempDir();
   const logo = brand.logoKey ? await getFile(brand.logoKey) : null;
   const db = await getDb();
   let voiceProvider = "";
+  let demoImages = false;
 
   try {
     // Each scene (image + voice + frame + clip) is prepared in parallel; order is kept.
@@ -106,7 +108,9 @@ export async function buildReelVideo(input: {
         bytes: img.data.length,
         prompt: scene.imagePrompt,
         provider: img.provider,
+        demo: isDemoProvider(img.provider),
       });
+      if (isDemoProvider(img.provider)) demoImages = true;
 
       // 3. voice
       const voice = await speak({ workspaceId, brandId: brand.id, postId }, scene.voiceover);
@@ -178,7 +182,7 @@ export async function buildReelVideo(input: {
       "-movflags", "+faststart",
       out,
     ]);
-    return { mp4: await fs.readFile(out), durationSec: total, voiceProvider };
+    return { mp4: await fs.readFile(out), durationSec: total, voiceProvider, demoImages };
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
@@ -194,10 +198,11 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
   const db = await getDb();
   const started = Date.now();
 
-  const script = await writeReelScript(campaign, brand, post);
+  const { script, provider: scriptProvider } = await writeReelScriptWithProvider(campaign, brand, post);
   await db.update(schema.posts).set({ reelScript: script }).where(eq(schema.posts.id, post.id));
 
   const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script });
+  const demoVideo = video.demoImages || isDemoProvider(scriptProvider);
   const key = newKey(post.workspaceId, "video", "video/mp4");
   await putFile(key, video.mp4, "video/mp4");
   const [asset] = await db
@@ -214,6 +219,7 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
       bytes: video.mp4.length,
       prompt: script.title,
       provider: `ffmpeg + ${video.voiceProvider} voice`,
+      demo: demoVideo,
     })
     .returning();
   await db.insert(schema.generations).values({
@@ -234,5 +240,6 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
     .update(schema.posts)
     .set({ reelStatus: "done", reelError: null, reelScript: { ...script, voice: video.voiceProvider, durationSec: Math.round(video.durationSec) } })
     .where(eq(schema.posts.id, post.id));
+  await setDemoPart(post.workspaceId, post.id, "video", demoVideo);
   return asset;
 }

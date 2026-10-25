@@ -1,12 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { composePoster, posterSize, wrap, readableOn } from "@/agent/images/poster";
 import { FakeImageProvider } from "@/agent/images/providers";
 import { generateImage } from "@/agent/images/router";
-import { generateText } from "@/agent/router";
-import { TrialEndedError } from "@/lib/plan";
+import { generateText, QuotaExceededError } from "@/agent/router";
+import { TrialEndedError, trialInfo } from "@/lib/plan";
 import { createBrand, createCampaign, getCampaign, latestPosters, listCampaignPosts } from "@/lib/data";
 import { enqueue, processJobs } from "@/jobs/queue";
 import { getFile } from "@/lib/storage";
@@ -39,12 +39,41 @@ describe("free trial", () => {
     await freshDb();
   });
 
-  it("blocks all AI generation after the trial ends", async () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("blocks all AI generation after the trial ends (when a trial is configured)", async () => {
+    vi.stubEnv("AGENT_TRIAL_DAYS", "21");
     const { ws } = await makeWorkspace();
     const db = await getDb();
     await db.update(schema.workspaces).set({ trialEndsAt: new Date(Date.now() - 1000) }).where(eq(schema.workspaces.id, ws.id));
     await expect(generateText({ workspaceId: ws.id, purpose: "t" }, { system: "s", prompt: "p" })).rejects.toBeInstanceOf(TrialEndedError);
     await expect(generateImage({ workspaceId: ws.id, purpose: "t" }, { prompt: "p", width: 64, height: 64 })).rejects.toBeInstanceOf(TrialEndedError);
+  });
+
+  it("AGENT_TRIAL_DAYS=0 means no expiry: an old trial date does not block AI", async () => {
+    vi.stubEnv("AGENT_TRIAL_DAYS", "0");
+    const { ws } = await makeWorkspace();
+    const db = await getDb();
+    await db.update(schema.workspaces).set({ trialEndsAt: new Date(Date.now() - 86400000) }).where(eq(schema.workspaces.id, ws.id));
+    const info = await trialInfo(ws.id);
+    expect(info).toMatchObject({ enabled: false, active: true, daysLeft: null });
+    await expect(generateText({ workspaceId: ws.id, purpose: "t" }, { system: "s", prompt: "p" })).resolves.toMatchObject({ provider: "fake" });
+  });
+
+  it("AGENT_TRIAL_DAYS=0 keeps the monthly usage limits", async () => {
+    vi.stubEnv("AGENT_TRIAL_DAYS", "0");
+    vi.stubEnv("AGENT_MONTHLY_TEXT_GENERATIONS", "1");
+    const { ws } = await makeWorkspace();
+    await generateText({ workspaceId: ws.id, purpose: "t" }, { system: "s", prompt: "p" });
+    await expect(generateText({ workspaceId: ws.id, purpose: "t" }, { system: "s", prompt: "p" })).rejects.toBeInstanceOf(QuotaExceededError);
+  });
+
+  it("no trial setting at all defaults to no expiry", async () => {
+    vi.stubEnv("AGENT_TRIAL_DAYS", "");
+    const { ws } = await makeWorkspace();
+    expect((await trialInfo(ws.id)).enabled).toBe(false);
   });
 
   it("gives new workspaces about 21 days", async () => {

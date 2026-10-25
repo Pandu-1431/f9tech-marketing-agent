@@ -47,7 +47,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         />
       </div>
 
-      {state?.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
+      {state?.error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
 
       <button className="btn w-full" disabled={pending}>
         {pending ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}

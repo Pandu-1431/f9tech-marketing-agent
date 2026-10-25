@@ -108,7 +108,7 @@ export function BrandForm({ brand, logoUrl, action, submitLabel }: Props) {
         </fieldset>
       </section>
 
-      {state?.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
+      {state?.error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
       <button className="btn" disabled={pending}>{pending ? "Saving…" : submitLabel}</button>
     </form>
   );

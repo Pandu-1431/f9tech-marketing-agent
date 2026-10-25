@@ -3,6 +3,7 @@ import type { Brand, Campaign, Post } from "@/db/schema";
 import { brandSystemPrompt } from "./brand-context";
 import { parseJsonObject } from "./json";
 import { generateText } from "./router";
+import { isDemoProvider } from "@/lib/data";
 
 const copySchema = z.object({
   caption: z.string().min(1),
@@ -57,6 +58,8 @@ export async function writePostCopy(campaign: Campaign, brand: Brand, post: Post
     seoKeywords: copy.seo_keywords.slice(0, 8),
     posterHeadline: (copy.poster_headline || campaign.theme).slice(0, 120),
     posterCta: copy.poster_cta ? copy.poster_cta.slice(0, 60) : null,
+    /** true when the built-in demo generator wrote it (not a real AI model). */
+    demo: isDemoProvider(out.provider),
   };
 }
 
@@ -87,7 +90,7 @@ export function batchPrompt(campaign: Campaign, posts: Post[]): string {
 
 type CopyResult = Awaited<ReturnType<typeof writePostCopy>>;
 
-function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: Post): CopyResult {
+function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: Post, demo: boolean): CopyResult {
   const hashtags = Array.from(new Set(copy.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`).replace(/\s+/g, "")))).slice(0, 20);
   return {
     caption: copy.caption.trim(),
@@ -96,6 +99,7 @@ function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: P
     seoKeywords: copy.seo_keywords.slice(0, 8),
     posterHeadline: (copy.poster_headline || campaign.theme).slice(0, 120),
     posterCta: copy.poster_cta ? copy.poster_cta.slice(0, 60) : null,
+    demo,
   };
 }
 
@@ -110,7 +114,7 @@ export async function writePostsCopyBatch(campaign: Campaign, brand: Brand, post
   const result = new Map<number, CopyResult>();
   for (const c of parsed.posts) {
     const post = byId.get(c.id);
-    if (post && c.caption) result.set(post.id, normalise(c, campaign, post));
+    if (post && c.caption) result.set(post.id, normalise(c, campaign, post, isDemoProvider(out.provider)));
   }
   return result;
 }
