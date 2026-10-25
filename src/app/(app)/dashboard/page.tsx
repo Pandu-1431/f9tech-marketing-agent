@@ -67,11 +67,26 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {brandCount === 0 && (
+      {(brandCount === 0 || campaigns.length === 0) && (
         <div className="card border-indigo-200 bg-indigo-50">
-          <p className="font-medium">Start by adding your first business account.</p>
-          <p className="text-sm text-zinc-600">The Brand Kit you fill in is used for every post the agent writes.</p>
-          <Link href="/brands/new" className="btn mt-3">Add business account</Link>
+          <p className="font-medium">Get started in 3 steps</p>
+          <ol className="mt-3 space-y-3 text-sm">
+            <li className="flex items-center justify-between gap-4">
+              <span className={brandCount > 0 ? "text-zinc-400 line-through" : ""}>
+                <b>1. Add your business account.</b> Fill in the Brand Kit once: name, colors, tone, platforms.
+              </span>
+              {brandCount === 0 && <Link href="/brands/new" className="btn">Add business account</Link>}
+            </li>
+            <li className="flex items-center justify-between gap-4">
+              <span className={campaigns.length > 0 ? "text-zinc-400 line-through" : brandCount === 0 ? "text-zinc-400" : ""}>
+                <b>2. Create a campaign.</b> Type a theme; the agent plans the calendar and writes every post.
+              </span>
+              {brandCount > 0 && campaigns.length === 0 && <Link href="/campaigns/new" className="btn">New campaign</Link>}
+            </li>
+            <li className={campaigns.length === 0 ? "text-zinc-400" : ""}>
+              <b>3. Review and approve.</b> Open the campaign, edit or rewrite posts, then approve them.
+            </li>
+          </ol>
         </div>
       )}
 

@@ -4,7 +4,8 @@ import { freePlan } from "@/lib/config";
 import { listBrands } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
-export default async function BrandsPage() {
+export default async function BrandsPage({ searchParams }: { searchParams: Promise<{ added?: string }> }) {
+  const { added } = await searchParams;
   const { workspace } = await requireAuth();
   const brands = await listBrands(workspace.id);
   const max = freePlan().maxBrands;
@@ -25,8 +26,19 @@ export default async function BrandsPage() {
         )}
       </div>
 
+      {added && brands.length > 0 && (
+        <div className="card border-emerald-200 bg-emerald-50">
+          <p className="font-medium text-emerald-900">Business account saved.</p>
+          <p className="text-sm text-emerald-800">Next step: create a campaign. Type a theme and the agent plans the calendar and writes every post.</p>
+          <Link href="/campaigns/new" className="btn mt-3">Create your first campaign</Link>
+        </div>
+      )}
+
       {brands.length === 0 ? (
-        <div className="card text-sm text-zinc-500">No business accounts yet.</div>
+        <div className="card text-sm text-zinc-500">
+          <p>No business accounts yet. A business account holds your Brand Kit (name, colors, tone, platforms).</p>
+          <Link href="/brands/new" className="btn mt-3">Add business account</Link>
+        </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {brands.map((b) => (

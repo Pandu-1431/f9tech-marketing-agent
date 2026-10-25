@@ -97,7 +97,7 @@ export async function createBrandAction(_prev: FormState, formData: FormData): P
     throw err;
   }
   revalidatePath("/brands");
-  redirect("/brands");
+  redirect("/brands?added=1");
 }
 
 export async function updateBrandAction(id: number, _prev: FormState, formData: FormData): Promise<FormState> {
