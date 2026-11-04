@@ -10,9 +10,10 @@ type Props = {
   logoUrl?: string | null;
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
   submitLabel: string;
+  timeZones?: string[];
 };
 
-export function BrandForm({ brand, logoUrl, action, submitLabel }: Props) {
+export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["Asia/Kolkata"] }: Props) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
   const join = (v?: string[] | null) => (v ?? []).join(", ");
 
@@ -68,6 +69,26 @@ export function BrandForm({ brand, logoUrl, action, submitLabel }: Props) {
         <div>
           <label className="label" htmlFor="language">Language</label>
           <input className="input" id="language" name="language" defaultValue={brand?.language ?? "English"} placeholder="English, Telugu, Hindi…" />
+        </div>
+        <div>
+          <label className="label" htmlFor="timezone">Time zone for posting times</label>
+          <select className="input" id="timezone" name="timezone" defaultValue={brand?.timezone ?? "Asia/Kolkata"}>
+            {timeZones.map((z) => (
+              <option key={z} value={z}>{z}</option>
+            ))}
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <label className="label" htmlFor="services">Services or products</label>
+          <textarea
+            className="input"
+            id="services"
+            name="services"
+            rows={3}
+            defaultValue={brand?.services ?? ""}
+            placeholder={"One per line, e.g.\nWedding sweets boxes\nCorporate Diwali gifting\nSugar-free range"}
+          />
+          <p className="hint">The planner spreads posts across these, so every service gets attention.</p>
         </div>
         <div>
           <label className="label" htmlFor="colors">Brand colours</label>

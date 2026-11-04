@@ -2,6 +2,15 @@ import type { Brand } from "@/db/schema";
 
 const list = (items: string[] | null | undefined) => (items && items.length ? items.join(", ") : "not set");
 
+/** The brand's services, one per line in the Brand Kit. */
+export function brandServices(brand: Pick<Brand, "services">): string[] {
+  return (brand.services ?? "")
+    .split(/\r?\n/)
+    .map((s) => s.replace(/^[-*•\s]+/, "").trim())
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
 /**
  * Turns a Brand Kit into the system prompt every generation starts with.
  * This is what keeps tone, audience and style consistent across all posts.
@@ -19,6 +28,7 @@ export function brandSystemPrompt(brand: Brand): string {
     `City / market: ${brand.city ?? "not set"}`,
     `Website: ${brand.website ?? "not set"}`,
     `About: ${brand.description ?? "not set"}`,
+    `Services / products: ${brandServices(brand).join("; ") || "not set"}`,
     `Audience: ${brand.audience ?? "not set"}`,
     `Tone of voice: ${brand.tone ?? "friendly, clear, professional"}`,
     `Language: ${brand.language}`,

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { DEFAULT_TIMEZONE, isValidTimeZone } from "@/lib/schedule";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireEditor } from "@/lib/auth";
@@ -56,6 +57,13 @@ const brandSchema = z.object({
   language: z.string().trim().min(2).max(60).default("English"),
   dos: text(1000),
   donts: text(1000),
+  services: text(3000),
+  timezone: z
+    .string()
+    .trim()
+    .max(60)
+    .refine((v) => isValidTimeZone(v), "Pick a valid time zone")
+    .default(DEFAULT_TIMEZONE),
 });
 
 function readBrand(formData: FormData) {
@@ -70,6 +78,8 @@ function readBrand(formData: FormData) {
     language: formData.get("language") || "English",
     dos: formData.get("dos") ?? "",
     donts: formData.get("donts") ?? "",
+    services: formData.get("services") ?? "",
+    timezone: formData.get("timezone") || DEFAULT_TIMEZONE,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form" } as const;
   return {

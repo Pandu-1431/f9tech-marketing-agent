@@ -4,6 +4,7 @@ import {
   editPosterTextAction,
   makeReelAction,
   redesignPostAction,
+  rescheduleFormAction,
   retryCampaignAction,
   reviewPostAction,
   rewritePostAction,
@@ -15,6 +16,7 @@ import { requireAuth } from "@/lib/auth";
 import { canEditContent } from "@/lib/team";
 import { campaignHistory, getBrand, getCampaign, isApprovedForPublish, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
+import { formatSlot, utcToZoned } from "@/lib/schedule";
 import { campaignJobProblem } from "@/jobs/queue";
 import type { Campaign, Post } from "@/db/schema";
 import { allowedFormats } from "@/agent/planner";
@@ -96,7 +98,26 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         {posts.map((post) => (
           <article key={post.id} className="card space-y-3">
             <header className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-medium">{post.publishOn}</span>
+              <span className="font-medium" data-testid="post-slot">
+                {post.scheduledAt ? formatSlot(post.scheduledAt, post.timezone) : post.publishOn}
+              </span>
+              {canEdit && post.status !== "published" && (
+                <details className="relative">
+                  <summary className="cursor-pointer text-xs text-indigo-600">Change</summary>
+                  <form action={rescheduleFormAction.bind(null, post.id)} className="absolute z-20 mt-1 flex items-end gap-2 rounded-lg border border-zinc-200 bg-white p-2 shadow">
+                    <input className="input py-1" type="date" name="date" defaultValue={post.publishOn} required aria-label="Date" />
+                    <input
+                      className="input py-1"
+                      type="time"
+                      name="time"
+                      defaultValue={post.scheduledAt ? utcToZoned(post.scheduledAt, post.timezone).time : ""}
+                      aria-label="Time"
+                    />
+                    <button className="btn py-1">Save</button>
+                  </form>
+                </details>
+              )}
+              {isApprovedForPublish(post) && <span className="badge bg-emerald-600 text-white">Ready to publish</span>}
               <span className="badge bg-zinc-100 text-zinc-700">{PLATFORM_LABELS[post.platform] ?? post.platform}</span>
               <span className="badge bg-zinc-100 text-zinc-700">{post.format}</span>
               <StatusBadge status={post.status} />

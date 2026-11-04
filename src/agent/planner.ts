@@ -3,7 +3,8 @@ import { getDb, schema } from "@/db";
 import type { Brand, Campaign } from "@/db/schema";
 import { campaignArc, campaignTypeLabel } from "@/lib/campaign-types";
 import { freePlan } from "@/lib/config";
-import { brandSystemPrompt } from "./brand-context";
+import { brandServices, brandSystemPrompt } from "./brand-context";
+import { DEFAULT_TIMEZONE, isHhMm, isValidTimeZone, slotFor, zonedToUtc } from "@/lib/schedule";
 import { parseJsonObject } from "./json";
 import { generateText } from "./router";
 
@@ -16,6 +17,7 @@ const planSchema = z.object({
     .array(
       z.object({
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        time: z.string().optional(),
         platform: z.string(),
         format: z.string().default("image"),
         angle: z.string(),
@@ -51,8 +53,9 @@ export function campaignBriefLines(c: Campaign): string[] {
   ].filter((line): line is string => Boolean(line));
 }
 
-export function plannerPrompt(c: Campaign, postCount: number): string {
+export function plannerPrompt(c: Campaign, postCount: number, brand?: Pick<Brand, "services">): string {
   const formats = allowedFormats(c);
+  const services = brand ? brandServices(brand) : [];
   return [
     "TASK: CAMPAIGN_PLAN",
     `THEME: ${c.theme}`,
@@ -63,14 +66,20 @@ export function plannerPrompt(c: Campaign, postCount: number): string {
     `START_DATE: ${c.startDate}`,
     `END_DATE: ${c.endDate}`,
     `POST_COUNT: ${postCount}`,
+    services.length > 0 && `SERVICES: ${services.join("; ")}`,
     "",
     "Plan a content calendar for this campaign.",
     `- Exactly ${postCount} posts, spread across the dates (inclusive), spread across the platforms.`,
     `- Use only these formats: ${formats.join(", ")}. Vary them to suit each platform.`,
     `- ${campaignArc(c.campaignType)}`,
+    services.length > 0 &&
+      "- Spread the posts across the SERVICES that fit the theme, so each fitting service gets attention; name the service in the angle.",
     "- Each angle is one or two sentences: the specific idea of that post.",
-    'Reply with JSON only: {"strategy": "2-3 sentences", "posts": [{"date": "YYYY-MM-DD", "platform": "instagram", "format": "image", "angle": "..."}]}',
-  ].join("\n");
+    '- "time" is the local posting time (HH:MM, 24h) when the audience of that platform is most active; leave it out if unsure.',
+    'Reply with JSON only: {"strategy": "2-3 sentences", "posts": [{"date": "YYYY-MM-DD", "time": "19:00", "platform": "instagram", "format": "image", "angle": "..."}]}',
+  ]
+    .filter((line): line is string => line !== false)
+    .join("\n");
 }
 
 /** Theme -> calendar of post ideas, saved as posts with status "idea". */
@@ -78,7 +87,7 @@ export async function planCampaign(campaign: Campaign, brand: Brand) {
   const postCount = targetPostCount(campaign);
   const out = await generateText(
     { workspaceId: campaign.workspaceId, brandId: brand.id, purpose: "campaign_plan", subject: { type: "campaign", id: campaign.id } },
-    { system: brandSystemPrompt(brand), prompt: plannerPrompt(campaign, postCount), json: true, temperature: 0.7 },
+    { system: brandSystemPrompt(brand), prompt: plannerPrompt(campaign, postCount, brand), json: true, temperature: 0.7 },
   );
 
   const plan = planSchema.parse(parseJsonObject(out.text));
@@ -97,6 +106,8 @@ export async function planCampaign(campaign: Campaign, brand: Brand) {
     const date = p.date < campaign.startDate || p.date > campaign.endDate ? evenDate(i) : p.date;
     const platform = allowed.has(p.platform) ? p.platform : campaign.platforms[i % campaign.platforms.length];
     const format = formats.includes(p.format) ? p.format : formats[i % formats.length];
+    const timezone = isValidTimeZone(brand.timezone) ? brand.timezone : DEFAULT_TIMEZONE;
+    const time = p.time && isHhMm(p.time) ? p.time : slotFor(platform);
     return {
       workspaceId: campaign.workspaceId,
       campaignId: campaign.id,
@@ -104,6 +115,8 @@ export async function planCampaign(campaign: Campaign, brand: Brand) {
       platform,
       format,
       publishOn: date,
+      scheduledAt: zonedToUtc(date, time, timezone),
+      timezone,
       angle: p.angle,
       status: "idea",
     };

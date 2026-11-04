@@ -106,6 +106,10 @@ export const brands = pgTable(
     platforms: jsonb("platforms").$type<string[]>().default([]).notNull(),
     dos: text("dos"),
     donts: text("donts"),
+    // What the business sells or does, one per line. The planner spreads posts across them.
+    services: text("services"),
+    // Posting times are in this zone (IANA name).
+    timezone: varchar("timezone", { length: 60 }).default("Asia/Kolkata").notNull(),
     logoUrl: text("logo_url"),
     logoKey: text("logo_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -167,7 +171,10 @@ export const posts = pgTable(
       .references(() => brands.id, { onDelete: "cascade" }),
     platform: varchar("platform", { length: 30 }).notNull(),
     format: varchar("format", { length: 20 }).default("image").notNull(), // image | carousel | reel | story | text
-    publishOn: date("publish_on").notNull(),
+    publishOn: date("publish_on").notNull(), // local date of scheduledAt (kept in sync)
+    // When to publish (UTC instant) and the zone the time was chosen in. Not part of the approved content.
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+    timezone: varchar("timezone", { length: 60 }).default("Asia/Kolkata").notNull(),
     angle: text("angle"),
     caption: text("caption"),
     hashtags: jsonb("hashtags").$type<string[]>().default([]).notNull(),
@@ -195,7 +202,11 @@ export const posts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("posts_ws_status").on(t.workspaceId, t.status), index("posts_campaign").on(t.campaignId)],
+  (t) => [
+    index("posts_ws_status").on(t.workspaceId, t.status),
+    index("posts_campaign").on(t.campaignId),
+    index("posts_ws_publish_on").on(t.workspaceId, t.publishOn),
+  ],
 );
 
 // A frozen copy of a post's caption and creative. Publishing (later) uses the approved version.

@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { DEFAULT_TIMEZONE, isHhMm, isIsoDate, isValidTimeZone, slotFor, utcToZoned, zonedToUtc } from "./schedule";
 import { getDb, schema } from "@/db";
 import type { NewBrand } from "@/db/schema";
 import { freePlan } from "./config";
@@ -136,7 +137,7 @@ export async function listCampaignPosts(workspaceId: number, campaignId: number)
     .select()
     .from(schema.posts)
     .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId)))
-    .orderBy(asc(schema.posts.publishOn), asc(schema.posts.id));
+    .orderBy(asc(schema.posts.publishOn), asc(schema.posts.scheduledAt), asc(schema.posts.id));
 }
 
 export async function getPost(workspaceId: number, id: number) {
@@ -430,4 +431,60 @@ export async function latestVideos(workspaceId: number, campaignId: number) {
   const byPost = new Map<number, (typeof rows)[number]["asset"]>();
   for (const r of rows) if (r.asset.postId && !byPost.has(r.asset.postId)) byPost.set(r.asset.postId, r.asset);
   return byPost;
+}
+
+// ---------- Calendar and scheduling ----------
+
+export class ScheduleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ScheduleError";
+  }
+}
+
+/**
+ * Move a post to another local date and/or time (in the post's own time zone).
+ * The schedule is not part of the approved content, so approval stays. Published posts can't move.
+ */
+export async function reschedulePost(workspaceId: number, postId: number, to: { date: string; time?: string }) {
+  if (!isIsoDate(to.date)) throw new ScheduleError("Pick a valid date");
+  if (to.time !== undefined && !isHhMm(to.time)) throw new ScheduleError("Pick a valid time");
+  const post = await getPost(workspaceId, postId);
+  if (!post) return null;
+  if (post.status === "published") throw new ScheduleError("This post is already published.");
+  const tz = isValidTimeZone(post.timezone) ? post.timezone : DEFAULT_TIMEZONE;
+  const time = to.time ?? (post.scheduledAt ? utcToZoned(post.scheduledAt, tz).time : slotFor(post.platform));
+  const db = await getDb();
+  const [row] = await db
+    .update(schema.posts)
+    .set({ publishOn: to.date, scheduledAt: zonedToUtc(to.date, time, tz), updatedAt: new Date() })
+    .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId)))
+    .returning();
+  return row ?? null;
+}
+
+/** Every post between two local dates (inclusive), across campaigns and brands, with names and the latest poster. */
+export async function calendarPosts(workspaceId: number, range: { from: string; to: string; brandId?: number }) {
+  const db = await getDb();
+  const conds = [eq(schema.posts.workspaceId, workspaceId), gte(schema.posts.publishOn, range.from), lte(schema.posts.publishOn, range.to)];
+  if (range.brandId) conds.push(eq(schema.posts.brandId, range.brandId));
+  const rows = await db
+    .select({ post: schema.posts, campaignTheme: schema.campaigns.theme, brandName: schema.brands.name })
+    .from(schema.posts)
+    .innerJoin(schema.campaigns, eq(schema.campaigns.id, schema.posts.campaignId))
+    .innerJoin(schema.brands, eq(schema.brands.id, schema.posts.brandId))
+    .where(and(...conds))
+    .orderBy(asc(schema.posts.scheduledAt), asc(schema.posts.id))
+    .limit(1000);
+  const ids = rows.map((r) => r.post.id);
+  const posters = new Map<number, string>();
+  if (ids.length > 0) {
+    const assets = await db
+      .select({ postId: schema.assets.postId, key: schema.assets.storageKey })
+      .from(schema.assets)
+      .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.kind, "poster"), inArray(schema.assets.postId, ids)))
+      .orderBy(desc(schema.assets.id));
+    for (const a of assets) if (a.postId && !posters.has(a.postId)) posters.set(a.postId, a.key);
+  }
+  return rows.map((r) => ({ ...r.post, campaignTheme: r.campaignTheme, brandName: r.brandName, posterKey: posters.get(r.post.id) ?? null }));
 }

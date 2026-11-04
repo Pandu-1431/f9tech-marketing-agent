@@ -12,17 +12,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3">
           <Link href="/dashboard" className="font-semibold">MarketingAgent</Link>
-          <nav className="flex gap-4 text-sm text-zinc-600">
+          <nav className="flex flex-wrap gap-x-3 gap-y-1 whitespace-nowrap text-sm text-zinc-600">
             <Link href="/dashboard" className="hover:text-zinc-900">Dashboard</Link>
             <Link href="/brands" className="hover:text-zinc-900">Business accounts</Link>
             <Link href="/campaigns" className="hover:text-zinc-900">Campaigns</Link>
+            <Link href="/calendar" className="hover:text-zinc-900">Calendar</Link>
             <Link href="/library" className="hover:text-zinc-900">Library</Link>
             {canEditContent(role) && <Link href="/settings/ai" className="hover:text-zinc-900">AI connections</Link>}
             {canManageTeam(role) && <Link href="/settings/team" className="hover:text-zinc-900">Team</Link>}
           </nav>
-          <div className="ml-auto flex items-center gap-3 text-sm">
+          <div className="ml-auto flex items-center gap-3 whitespace-nowrap text-sm">
             {myWorkspaces.length > 1 && (
               <form action={switchWorkspaceAction} className="flex items-center gap-1">
                 <select name="workspaceId" defaultValue={workspace.id} className="rounded-md border border-zinc-200 px-1.5 py-1 text-xs" aria-label="Workspace">

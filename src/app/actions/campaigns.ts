@@ -14,7 +14,9 @@ import {
   LimitError,
   listCampaignPosts,
   recordPostVersion,
+  reschedulePost,
   reviewPost,
+  ScheduleError,
   StaleVersionError,
   setCampaignStatus,
   setDemoPart,
@@ -200,4 +202,24 @@ export async function makeReelAction(postId: number) {
   await enqueue("post.reel", { workspaceId: workspace.id, postId }, workspace.id);
   kickJobs();
   revalidatePath(`/campaigns/${post.campaignId}`);
+}
+
+/** Move a post to another day and/or time. Used by the calendar (drag and drop) and the post card. */
+export async function reschedulePostAction(postId: number, date: string, time?: string): Promise<{ error?: string }> {
+  const { workspace } = await requireEditor();
+  try {
+    const row = await reschedulePost(workspace.id, postId, { date, time: time || undefined });
+    if (!row) return { error: "Post not found" };
+    revalidatePath("/calendar");
+    revalidatePath(`/campaigns/${row.campaignId}`);
+    return {};
+  } catch (err) {
+    if (err instanceof ScheduleError) return { error: err.message };
+    throw err;
+  }
+}
+
+/** Form version (post card): reads date + time fields. */
+export async function rescheduleFormAction(postId: number, formData: FormData) {
+  await reschedulePostAction(postId, String(formData.get("date") ?? ""), String(formData.get("time") ?? "") || undefined);
 }
