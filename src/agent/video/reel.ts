@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { brandFonts } from "@/lib/fonts";
 import path from "node:path";
 import { and, count, eq, gte } from "drizzle-orm";
 import { getDb, schema } from "@/db";
@@ -130,6 +131,7 @@ export async function buildReelVideo(input: {
         cta: last ? script.cta : null,
         sceneIndex: i,
         sceneCount: script.scenes.length,
+        fonts: brandFonts(brand.fonts),
       });
       const bgPath = path.join(dir, `b${i}.png`);
       const overlayPath = path.join(dir, `o${i}.png`);

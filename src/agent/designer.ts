@@ -3,6 +3,8 @@ import { getDb, schema } from "@/db";
 import type { Brand, Post } from "@/db/schema";
 import { getFile, newKey, putFile } from "@/lib/storage";
 import { isDemoProvider, recordPostVersion, setDemoPart } from "@/lib/data";
+import { brandFonts } from "@/lib/fonts";
+import { creativeSpec } from "@/lib/formats";
 import { generateImage } from "./images/router";
 import { composePoster, posterSize, POSTER_TEMPLATES, type PosterTemplate } from "./images/poster";
 
@@ -79,6 +81,8 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
     colors: brand.colors,
     logo,
     footer: [brand.name, brand.city].filter(Boolean).join(" · "),
+    fonts: brandFonts(brand.fonts),
+    safe: creativeSpec(post.platform, post.format).safe,
   });
 
   const demoImage = isDemoProvider(backgroundProvider);

@@ -5,6 +5,7 @@ import { campaignBriefLines } from "./planner";
 import { parseJsonObject } from "./json";
 import { generateText } from "./router";
 import { isDemoProvider } from "@/lib/data";
+import { CAPTION_RULES, capHashtags, HASHTAG_RULES } from "@/lib/formats";
 
 const copySchema = z.object({
   caption: z.string().min(1),
@@ -15,14 +16,27 @@ const copySchema = z.object({
   poster_cta: z.string().default(""),
 });
 
-const platformRules: Record<string, string> = {
-  instagram: "Hook in the first line, 80-150 words, short lines, 1-3 emojis, call to action, 8-15 relevant hashtags.",
-  facebook: "Conversational, 60-120 words, clear call to action, 2-5 hashtags.",
-  linkedin: "Professional, insight first, 100-200 words, no emoji overload, 3-5 hashtags.",
-  youtube: "Write a video title (under 70 chars) as the first line, then a description of 100-150 words with keywords early, 3-5 hashtags.",
-  x: "Under 260 characters including hashtags, punchy, 1-2 hashtags.",
-  google_business: "Google Business Profile update: 80-150 words, local keywords and city name, clear call to action, no hashtags.",
+const styleRules: Record<string, string> = {
+  instagram: "Hook in the first line, short lines, 1-3 emojis, call to action.",
+  facebook: "Conversational, clear call to action.",
+  linkedin: "Professional, insight first, no emoji overload.",
+  youtube: "First line = the video title, then the description with keywords early.",
+  x: "Punchy, one idea.",
+  google_business: "Google Business Profile update: local keywords and the city name, clear call to action.",
 };
+
+/** Style + length + hashtag rules for one platform, from the shared creative standards. */
+export function platformRule(platform: string): string {
+  const tags = HASHTAG_RULES[platform];
+  const caption = CAPTION_RULES[platform];
+  return [
+    styleRules[platform] ?? "Clear, on-brand, with a call to action.",
+    caption && `Length: ${caption.target}.`,
+    tags && (tags.max === 0 ? "No hashtags." : `Hashtags: ${tags.min}-${tags.max} (${tags.note})`),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 export function copyPrompt(campaign: Campaign, post: Post): string {
   return [
@@ -35,8 +49,8 @@ export function copyPrompt(campaign: Campaign, post: Post): string {
     `PUBLISH DATE: ${post.publishOn}`,
     `POST ANGLE: ${post.angle ?? ""}`,
     "",
-    `Platform rules: ${platformRules[post.platform] ?? "Clear, on-brand, with a call to action."}`,
-    "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text.",
+    `Platform rules: ${platformRule(post.platform)}`,
+    "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text. seo_keywords = 4-8 phrases a person would search on Google, YouTube or the Play Store (mix short and long-tail, include the city or language when relevant).",
     ...ctaRules(campaign),
     "Poster headline: the short offer/message printed on the image, max 7 words (e.g. \"Diwali Gift Boxes 20% Off\"). Poster CTA: 2-3 words (e.g. \"Order Now\").",
     "Image prompt: describe one on-brand visual (subject, setting, brand colours, mood, composition) for an AI image model. No text in the image unless essential.",
@@ -78,10 +92,10 @@ export function batchPrompt(campaign: Campaign, posts: Post[]): string {
     `Write the copy for each of these ${posts.length} posts. Each post must be different (new hook, new angle).`,
     ...posts.map(
       (p) =>
-        `- id ${p.id} | platform ${p.platform} | format ${p.format} | date ${p.publishOn} | angle: ${p.angle ?? ""}\n  Platform rules: ${platformRules[p.platform] ?? "Clear, on-brand, with a call to action."}`,
+        `- id ${p.id} | platform ${p.platform} | format ${p.format} | date ${p.publishOn} | angle: ${p.angle ?? ""}\n  Platform rules: ${platformRule(p.platform)}`,
     ),
     "",
-    "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text.",
+    "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text. seo_keywords = 4-8 phrases a person would search on Google, YouTube or the Play Store (mix short and long-tail, include the city or language when relevant).",
     ...ctaRules(campaign),
     'Poster headline: max 7 words printed on the image (e.g. "Diwali Gift Boxes 20% Off"). Poster CTA: 2-3 words (e.g. "Order Now").',
     "Image prompt: one on-brand visual (subject, setting, brand colours, mood). No text in the image.",
@@ -92,14 +106,12 @@ export function batchPrompt(campaign: Campaign, posts: Post[]): string {
 type CopyResult = ReturnType<typeof normalise>;
 
 function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: Post, demo: boolean) {
-  // Campaign hashtags go first so the 20-tag cap never drops them.
-  const hashtags = Array.from(
-    new Set([...campaign.hashtags, ...copy.hashtags].map((h) => (h.startsWith("#") ? h : `#${h}`).replace(/\s+/g, ""))),
-  ).slice(0, 20);
+  // Campaign hashtags go first so the platform cap (e.g. 5 on Instagram) never drops them.
+  const hashtags = capHashtags(post.platform, [...campaign.hashtags, ...copy.hashtags], post.format);
   const cta = copy.poster_cta || campaign.callToAction;
   return {
     caption: copy.caption.trim(),
-    hashtags: post.platform === "google_business" ? [] : hashtags,
+    hashtags,
     imagePrompt: copy.image_prompt.trim(),
     seoKeywords: copy.seo_keywords.slice(0, 8),
     posterHeadline: (copy.poster_headline || campaign.theme).slice(0, 120),

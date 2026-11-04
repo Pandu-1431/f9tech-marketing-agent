@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import type { FormState } from "@/app/actions/auth";
 import type { Brand } from "@/db/schema";
 import { PLATFORM_LABELS } from "@/lib/platforms";
+import { brandFonts, FONT_CHOICES } from "@/lib/font-choices";
 
 type Props = {
   brand?: Brand;
@@ -96,8 +97,21 @@ export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["A
           <p className="hint">Comma separated hex codes.</p>
         </div>
         <div>
-          <label className="label" htmlFor="fonts">Fonts</label>
-          <input className="input" id="fonts" name="fonts" defaultValue={join(brand?.fonts)} placeholder="Poppins, Lato" />
+          <label className="label" htmlFor="fontHeading">Heading font</label>
+          <select className="input" id="fontHeading" name="fontHeading" defaultValue={brandFonts(brand?.fonts).heading}>
+            {FONT_CHOICES.filter((f) => f.use !== "body").map((f) => (
+              <option key={f.family} value={f.family}>{f.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label" htmlFor="fontBody">Body font</label>
+          <select className="input" id="fontBody" name="fontBody" defaultValue={brandFonts(brand?.fonts).body}>
+            {FONT_CHOICES.filter((f) => f.use !== "heading").map((f) => (
+              <option key={f.family} value={f.family}>{f.label}</option>
+            ))}
+          </select>
+          <p className="hint">Used on every poster and video. Telugu and Hindi text switch to a matching font automatically.</p>
         </div>
         <div>
           <label className="label" htmlFor="keywords">SEO keywords</label>

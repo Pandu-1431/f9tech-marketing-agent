@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { DEFAULT_TIMEZONE, isValidTimeZone } from "@/lib/schedule";
+import { DEFAULT_BODY_FONT, DEFAULT_HEADING_FONT, FONT_CHOICES } from "@/lib/font-choices";
+
+const KNOWN_FONTS = new Set(FONT_CHOICES.map((f) => f.family));
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireEditor } from "@/lib/auth";
@@ -86,7 +89,7 @@ function readBrand(formData: FormData) {
     data: {
       ...parsed.data,
       colors: csv(formData.get("colors")),
-      fonts: csv(formData.get("fonts")),
+      fonts: [String(formData.get("fontHeading") || DEFAULT_HEADING_FONT), String(formData.get("fontBody") || DEFAULT_BODY_FONT)].filter((f) => KNOWN_FONTS.has(f)),
       keywords: csv(formData.get("keywords")),
       hashtags: csv(formData.get("hashtags")).map((h) => (h.startsWith("#") ? h : `#${h}`)),
       platforms: formData.getAll("platforms").map(String),

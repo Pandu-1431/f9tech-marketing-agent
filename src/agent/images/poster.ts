@@ -1,4 +1,8 @@
 import sharp, { type OverlayOptions } from "sharp";
+import { casedFor, DEFAULT_BODY_FONT, DEFAULT_HEADING_FONT, ensureFonts, fontStack, widthFactor } from "@/lib/fonts";
+import { creativeSpec, type Safe } from "@/lib/formats";
+
+ensureFonts();
 
 /*
  * Poster composer: background image + brand logo + headline + CTA + brand name,
@@ -20,9 +24,11 @@ export type PosterInput = {
   colors: string[];
   logo?: Buffer | null;
   footer?: string | null; // city / website
+  /** Brand heading and body fonts (bundled in assets/fonts). */
+  fonts?: { heading: string; body: string };
+  /** Areas the platform's own buttons cover (stories/reels); text stays out of them. */
+  safe?: Safe;
 };
-
-const FONT = "Poppins, Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', sans-serif";
 
 export function escapeXml(s: string): string {
   return s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]!);
@@ -83,12 +89,19 @@ export async function composePoster(input: PosterInput): Promise<Buffer> {
   const onAccent = readableOn(accent);
   const pad = Math.round(W * 0.06);
   const unit = W / 1080;
+  const headFamily = input.fonts?.heading ?? DEFAULT_HEADING_FONT;
+  const bodyFamily = input.fonts?.body ?? DEFAULT_BODY_FONT;
+  const headline = casedFor(headFamily, input.headline);
+  const HEAD = fontStack(headFamily, headline);
+  const BODY = fontStack(bodyFamily, `${input.cta ?? ""} ${input.footer ?? input.brandName}`);
+  const safe = input.safe ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const topY = Math.max(Math.round(pad * 0.7), safe.top); // logo chip top
 
   const bg = await sharp(input.background).resize(W, H, { fit: "cover", position: "attention" }).toBuffer();
 
   const headlineSize = Math.round((input.template === "center" ? 82 : 76) * unit);
-  const maxChars = Math.floor((W - pad * 2) / (headlineSize * 0.53));
-  const lines = wrap(input.headline, maxChars, 3);
+  const maxChars = Math.floor((W - pad * 2 - safe.right) / (headlineSize * widthFactor(headFamily)));
+  const lines = wrap(headline, maxChars, 3);
   const lineH = Math.round(headlineSize * 1.12);
   const ctaSize = Math.round(34 * unit);
   const cta = input.cta ? escapeXml(input.cta.toUpperCase()) : "";
@@ -98,26 +111,26 @@ export async function composePoster(input: PosterInput): Promise<Buffer> {
 
   let overlay = "";
   if (input.template === "band") {
-    const bandH = Math.round(pad * 1.4 + lines.length * lineH + (cta ? ctaH + pad * 0.6 : 0) + 40 * unit);
+    const bandH = Math.round(pad * 1.4 + lines.length * lineH + (cta ? ctaH + pad * 0.6 : 0) + 40 * unit) + safe.bottom;
     const y0 = H - bandH;
     overlay = `
       <rect x="0" y="${y0}" width="${W}" height="${bandH}" fill="${primary}" fill-opacity="0.94"/>
       <rect x="0" y="${y0}" width="${W}" height="${Math.round(10 * unit)}" fill="${accent}"/>
-      ${lines.map((l, i) => `<text x="${pad}" y="${y0 + pad + headlineSize * 0.8 + i * lineH}" font-family="${FONT}" font-weight="800" font-size="${headlineSize}" fill="${onPrimary}">${escapeXml(l)}</text>`).join("")}
+      ${lines.map((l, i) => `<text x="${pad}" y="${y0 + pad + headlineSize * 0.8 + i * lineH}" font-family="${HEAD}" font-weight="800" font-size="${headlineSize}" fill="${onPrimary}">${escapeXml(l)}</text>`).join("")}
       ${cta ? `<rect x="${pad}" y="${y0 + pad + lines.length * lineH + pad * 0.3}" width="${ctaW}" height="${ctaH}" rx="${ctaH / 2}" fill="${accent}"/>
-      <text x="${pad + ctaW / 2}" y="${y0 + pad + lines.length * lineH + pad * 0.3 + ctaH * 0.64}" text-anchor="middle" font-family="${FONT}" font-weight="700" font-size="${ctaSize}" fill="${onAccent}">${cta}</text>` : ""}
-      <text x="${W - pad}" y="${H - pad * 0.6}" text-anchor="end" font-family="${FONT}" font-weight="600" font-size="${Math.round(26 * unit)}" fill="${onPrimary}" fill-opacity="0.85">${footer}</text>`;
+      <text x="${pad + ctaW / 2}" y="${y0 + pad + lines.length * lineH + pad * 0.3 + ctaH * 0.64}" text-anchor="middle" font-family="${BODY}" font-weight="700" font-size="${ctaSize}" fill="${onAccent}">${cta}</text>` : ""}
+      <text x="${W - pad - safe.right}" y="${H - safe.bottom - pad * 0.6}" text-anchor="end" font-family="${BODY}" font-weight="600" font-size="${Math.round(26 * unit)}" fill="${onPrimary}" fill-opacity="0.85">${footer}</text>`;
   } else if (input.template === "top") {
-    const textTop = Math.round(pad * 0.7 + 150 * unit + pad * 0.5 + headlineSize * 0.8);
+    const textTop = Math.round(topY + 150 * unit + pad * 0.5 + headlineSize * 0.8);
     const blockH = Math.round(textTop + lines.length * lineH + (cta ? ctaH + pad : 0) + pad);
     overlay = `
       <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.75"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient></defs>
       <rect x="0" y="0" width="${W}" height="${blockH}" fill="url(#fade)"/>
-      ${lines.map((l, i) => `<text x="${pad}" y="${textTop + i * lineH}" font-family="${FONT}" font-weight="800" font-size="${headlineSize}" fill="#ffffff">${escapeXml(l)}</text>`).join("")}
+      ${lines.map((l, i) => `<text x="${pad}" y="${textTop + i * lineH}" font-family="${HEAD}" font-weight="800" font-size="${headlineSize}" fill="#ffffff">${escapeXml(l)}</text>`).join("")}
       ${cta ? `<rect x="${pad}" y="${textTop + (lines.length - 1) * lineH + pad * 0.6}" width="${ctaW}" height="${ctaH}" rx="${ctaH / 2}" fill="${accent}"/>
-      <text x="${pad + ctaW / 2}" y="${textTop + (lines.length - 1) * lineH + pad * 0.6 + ctaH * 0.64}" text-anchor="middle" font-family="${FONT}" font-weight="700" font-size="${ctaSize}" fill="${onAccent}">${cta}</text>` : ""}
-      <rect x="0" y="${H - Math.round(70 * unit)}" width="${W}" height="${Math.round(70 * unit)}" fill="${primary}"/>
-      <text x="${W / 2}" y="${H - Math.round(25 * unit)}" text-anchor="middle" font-family="${FONT}" font-weight="600" font-size="${Math.round(28 * unit)}" fill="${onPrimary}">${footer}</text>`;
+      <text x="${pad + ctaW / 2}" y="${textTop + (lines.length - 1) * lineH + pad * 0.6 + ctaH * 0.64}" text-anchor="middle" font-family="${BODY}" font-weight="700" font-size="${ctaSize}" fill="${onAccent}">${cta}</text>` : ""}
+      <rect x="0" y="${H - Math.round(70 * unit) - safe.bottom}" width="${W}" height="${Math.round(70 * unit) + safe.bottom}" fill="${primary}"/>
+      <text x="${W / 2}" y="${H - Math.round(25 * unit) - safe.bottom}" text-anchor="middle" font-family="${BODY}" font-weight="600" font-size="${Math.round(28 * unit)}" fill="${onPrimary}">${footer}</text>`;
   } else {
     const cardW = W - pad * 2;
     const cardH = Math.round(pad * 0.8 + lines.length * lineH + (cta ? pad * 0.1 + ctaH : 0) + pad * 0.8);
@@ -127,10 +140,10 @@ export async function composePoster(input: PosterInput): Promise<Buffer> {
       <rect x="0" y="0" width="${W}" height="${H}" fill="#000" fill-opacity="0.18"/>
       <rect x="${cx}" y="${cy}" width="${cardW}" height="${cardH}" rx="${Math.round(36 * unit)}" fill="#ffffff" fill-opacity="0.93"/>
       <rect x="${cx}" y="${cy}" width="${Math.round(14 * unit)}" height="${cardH}" rx="${Math.round(7 * unit)}" fill="${primary}"/>
-      ${lines.map((l, i) => `<text x="${W / 2}" y="${cy + pad * 0.8 + headlineSize * 0.8 + i * lineH}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${headlineSize}" fill="${primary}">${escapeXml(l)}</text>`).join("")}
+      ${lines.map((l, i) => `<text x="${W / 2}" y="${cy + pad * 0.8 + headlineSize * 0.8 + i * lineH}" text-anchor="middle" font-family="${HEAD}" font-weight="800" font-size="${headlineSize}" fill="${primary}">${escapeXml(l)}</text>`).join("")}
       ${cta ? `<rect x="${(W - ctaW) / 2}" y="${cy + pad * 0.8 + lines.length * lineH + pad * 0.1}" width="${ctaW}" height="${ctaH}" rx="${ctaH / 2}" fill="${accent}"/>
-      <text x="${W / 2}" y="${cy + pad * 0.8 + lines.length * lineH + pad * 0.1 + ctaH * 0.64}" text-anchor="middle" font-family="${FONT}" font-weight="700" font-size="${ctaSize}" fill="${onAccent}">${cta}</text>` : ""}
-      <text x="${W / 2}" y="${H - pad * 0.7}" text-anchor="middle" font-family="${FONT}" font-weight="700" font-size="${Math.round(30 * unit)}" fill="#ffffff">${footer}</text>`;
+      <text x="${W / 2}" y="${cy + pad * 0.8 + lines.length * lineH + pad * 0.1 + ctaH * 0.64}" text-anchor="middle" font-family="${BODY}" font-weight="700" font-size="${ctaSize}" fill="${onAccent}">${cta}</text>` : ""}
+      <text x="${W / 2}" y="${H - safe.bottom - pad * 0.7}" text-anchor="middle" font-family="${BODY}" font-weight="700" font-size="${Math.round(30 * unit)}" fill="#ffffff">${footer}</text>`;
   }
 
   const layers: OverlayOptions[] = [{ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${overlay}</svg>`) }];
@@ -146,19 +159,19 @@ export async function composePoster(input: PosterInput): Promise<Buffer> {
     layers.push({
       input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${chip}" height="${chip}"><rect width="${chip}" height="${chip}" rx="${Math.round(28 * unit)}" fill="#ffffff" fill-opacity="0.95"/></svg>`),
       left: pad,
-      top: Math.round(pad * 0.7),
+      top: topY,
     });
-    layers.push({ input: logo, left: pad + chipPad, top: Math.round(pad * 0.7) + chipPad });
+    layers.push({ input: logo, left: pad + chipPad, top: topY + chipPad });
   } else {
     const name = escapeXml(input.brandName);
     const nameSize = Math.round(32 * unit);
     const w = Math.round(name.length * nameSize * 0.62 + 48 * unit);
     layers.push({
       input: Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${Math.round(nameSize * 2)}"><rect width="${w}" height="${Math.round(nameSize * 2)}" rx="${nameSize}" fill="#ffffff" fill-opacity="0.95"/><text x="${w / 2}" y="${Math.round(nameSize * 1.33)}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${nameSize}" fill="${primary}">${name}</text></svg>`,
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${Math.round(nameSize * 2)}"><rect width="${w}" height="${Math.round(nameSize * 2)}" rx="${nameSize}" fill="#ffffff" fill-opacity="0.95"/><text x="${w / 2}" y="${Math.round(nameSize * 1.33)}" text-anchor="middle" font-family="${HEAD}" font-weight="800" font-size="${nameSize}" fill="${primary}">${name}</text></svg>`,
       ),
       left: pad,
-      top: Math.round(pad * 0.7),
+      top: topY,
     });
   }
 
@@ -167,9 +180,6 @@ export async function composePoster(input: PosterInput): Promise<Buffer> {
 
 /** Pixel size for each platform + format. */
 export function posterSize(platform: string, format: string): { width: number; height: number } {
-  if (format === "story" || format === "reel") return { width: 1080, height: 1920 };
-  if (platform === "youtube") return { width: 1280, height: 720 };
-  if (platform === "google_business") return { width: 1200, height: 900 };
-  if (platform === "instagram") return { width: 1080, height: 1350 };
-  return { width: 1080, height: 1080 };
+  const { width, height } = creativeSpec(platform, format);
+  return { width, height };
 }
