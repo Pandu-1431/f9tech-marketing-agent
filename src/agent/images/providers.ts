@@ -39,7 +39,9 @@ export class CloudflareImageProvider implements ImageProvider {
     const res = await fetch(`${this.cfg.baseUrl ?? "https://api.cloudflare.com/client/v4"}/accounts/${this.cfg.accountId}/ai/run/${this.model}`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.cfg.apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ prompt: req.prompt, steps: 4, seed: req.seed }),
+      // FLUX schnell accepts only { prompt, steps }. Any extra field (e.g. "seed") is refused with HTTP 400,
+      // which silently sent every image to the demo generator (Nov 2026 fix).
+      body: JSON.stringify({ prompt: req.prompt, steps: 4 }),
       signal: timeout(),
     });
     if (!res.ok) await fail(this.name, res);
