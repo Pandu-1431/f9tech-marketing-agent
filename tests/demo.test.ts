@@ -85,6 +85,18 @@ describe("demo content labels", () => {
     expect((await getPost(ws.id, target.id))?.status).toBe("rejected");
   });
 
+  it("a redesign never reuses a demo background: once the real image AI works, the demo label goes away", async () => {
+    const { ws, posts } = await runCampaign("Repair Co");
+    const id = posts[0].id;
+    expect((await getPost(ws.id, id))?.demoParts).toContain("image");
+    useStubRealProviders(); // e.g. the Cloudflare fix is in
+    await enqueue("post.design", { workspaceId: ws.id, postId: id }, ws.id); // plain redesign, no "new image"
+    await processJobs();
+    expect((await getPost(ws.id, id))?.demoParts).not.toContain("image");
+    expect((await latestAsset(ws.id, id, "background")).demo).toBe(false);
+    expect((await latestAsset(ws.id, id, "poster")).demo).toBe(false);
+  });
+
   it("real providers produce unlabelled content that can be approved", async () => {
     useStubRealProviders();
     const { ws, posts } = await runCampaign("Real Co");

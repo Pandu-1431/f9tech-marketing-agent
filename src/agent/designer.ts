@@ -35,7 +35,8 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
       .where(and(eq(schema.assets.workspaceId, post.workspaceId), eq(schema.assets.postId, post.id), eq(schema.assets.kind, "background")))
       .orderBy(desc(schema.assets.id))
       .limit(1);
-    if (bgAsset) {
+    // A demo background is never reused: try the real image AI again (it may work now).
+    if (bgAsset && !bgAsset.demo) {
       background = await getFile(bgAsset.storageKey);
       backgroundProvider = bgAsset.provider;
     }

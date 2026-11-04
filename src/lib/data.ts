@@ -488,3 +488,17 @@ export async function calendarPosts(workspaceId: number, range: { from: string; 
   }
   return rows.map((r) => ({ ...r.post, campaignTheme: r.campaignTheme, brandName: r.brandName, posterKey: posters.get(r.post.id) ?? null }));
 }
+
+// ---------- Demo media repair ----------
+
+/** The most recent failed call to a real AI provider for a task, to explain why demo output was used. */
+export async function lastProviderFailure(workspaceId: number, task: "image" | "text" | "voice") {
+  const db = await getDb();
+  const [row] = await db
+    .select({ provider: schema.generations.provider, error: schema.generations.error, at: schema.generations.createdAt })
+    .from(schema.generations)
+    .where(and(eq(schema.generations.workspaceId, workspaceId), eq(schema.generations.task, task), eq(schema.generations.status, "failed")))
+    .orderBy(desc(schema.generations.id))
+    .limit(1);
+  return row ?? null;
+}

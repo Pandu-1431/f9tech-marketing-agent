@@ -223,3 +223,22 @@ export async function reschedulePostAction(postId: number, date: string, time?: 
 export async function rescheduleFormAction(postId: number, formData: FormData) {
   await reschedulePostAction(postId, String(formData.get("date") ?? ""), String(formData.get("time") ?? "") || undefined);
 }
+
+/** Remake every demo poster image (and demo reel video) in a campaign with the real AI providers. */
+export async function replaceDemoMediaAction(campaignId: number) {
+  const { workspace } = await requireEditor();
+  const posts = await listCampaignPosts(workspace.id, campaignId);
+  for (const post of posts) {
+    if (post.status === "idea" || post.status === "published") continue;
+    if (post.demoParts.includes("image") && post.designStatus !== "designing") {
+      await updatePost(workspace.id, post.id, { designStatus: "designing" });
+      await enqueue("post.design", { workspaceId: workspace.id, postId: post.id, newBackground: true }, workspace.id);
+    }
+    if (post.demoParts.includes("video") && post.reelStatus !== "making") {
+      await updatePost(workspace.id, post.id, { reelStatus: "making", reelError: null });
+      await enqueue("post.reel", { workspaceId: workspace.id, postId: post.id }, workspace.id);
+    }
+  }
+  kickJobs();
+  revalidatePath(`/campaigns/${campaignId}`);
+}

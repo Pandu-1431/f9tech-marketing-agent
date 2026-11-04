@@ -4,6 +4,7 @@ import {
   editPosterTextAction,
   makeReelAction,
   redesignPostAction,
+  replaceDemoMediaAction,
   rescheduleFormAction,
   retryCampaignAction,
   reviewPostAction,
@@ -14,7 +15,7 @@ import { PLATFORM_LABELS } from "@/lib/platforms";
 import { StatusBadge } from "@/components/status-badge";
 import { requireAuth } from "@/lib/auth";
 import { canEditContent } from "@/lib/team";
-import { campaignHistory, getBrand, getCampaign, isApprovedForPublish, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
+import { lastProviderFailure, campaignHistory, getBrand, getCampaign, isApprovedForPublish, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 import { formatSlot, utcToZoned } from "@/lib/schedule";
 import { campaignJobProblem } from "@/jobs/queue";
@@ -43,6 +44,8 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     campaign.status === "planning" || campaign.status === "writing" || campaign.status === "draft" || posts.some((p) => p.status === "idea") || designing.length > 0 || makingVideos > 0;
   const canEdit = canEditContent(role);
   const drafted = posts.filter((p) => p.status !== "idea").length;
+  const demoMedia = posts.filter((p) => p.status !== "idea" && (p.demoParts.includes("image") || p.demoParts.includes("video"))).length;
+  const imageFailure = demoMedia > 0 ? await lastProviderFailure(workspace.id, "image") : null;
 
   return (
     <div className="space-y-6">
@@ -67,6 +70,23 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       </div>
 
       {campaign.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{campaign.error}</p>}
+      {demoMedia > 0 && (
+        <div data-testid="demo-media-banner" className="flex flex-wrap items-center gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p className="min-w-60 flex-1">
+            <b>{demoMedia} post{demoMedia === 1 ? " has" : "s have"} demo images or video</b>, because the real image AI did not answer.
+            {imageFailure && (
+              <span className="mt-1 block text-xs text-amber-800">
+                Last error from {imageFailure.provider}: {(imageFailure.error ?? "").slice(0, 220)}
+              </span>
+            )}
+          </p>
+          {canEdit && (
+            <form action={replaceDemoMediaAction.bind(null, campaign.id)}>
+              <button className="btn">Make real images now</button>
+            </form>
+          )}
+        </div>
+      )}
       {problem && !campaign.error && (
         <p className={`rounded-lg px-3 py-2 text-sm ${problem.status === "failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
           {problem.status === "failed" ? "Stopped after 3 tries: " : `Hit a problem, retrying automatically (try ${problem.attempts} of 3): `}
