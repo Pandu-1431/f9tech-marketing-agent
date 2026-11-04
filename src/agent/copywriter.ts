@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Brand, Campaign, Post } from "@/db/schema";
 import { brandSystemPrompt } from "./brand-context";
+import { campaignBriefLines } from "./planner";
 import { parseJsonObject } from "./json";
 import { generateText } from "./router";
 import { isDemoProvider } from "@/lib/data";
@@ -28,6 +29,7 @@ export function copyPrompt(campaign: Campaign, post: Post): string {
     "TASK: POST_COPY",
     `CAMPAIGN THEME: ${campaign.theme}`,
     `CAMPAIGN GOAL: ${campaign.goal ?? "grow reach and enquiries"}`,
+    ...campaignBriefLines(campaign),
     `PLATFORM: ${post.platform}`,
     `FORMAT: ${post.format}`,
     `PUBLISH DATE: ${post.publishOn}`,
@@ -35,6 +37,7 @@ export function copyPrompt(campaign: Campaign, post: Post): string {
     "",
     `Platform rules: ${platformRules[post.platform] ?? "Clear, on-brand, with a call to action."}`,
     "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text.",
+    ...ctaRules(campaign),
     "Poster headline: the short offer/message printed on the image, max 7 words (e.g. \"Diwali Gift Boxes 20% Off\"). Poster CTA: 2-3 words (e.g. \"Order Now\").",
     "Image prompt: describe one on-brand visual (subject, setting, brand colours, mood, composition) for an AI image model. No text in the image unless essential.",
     'Reply with JSON only: {"caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_cta": "..."}',
@@ -48,19 +51,15 @@ export async function writePostCopy(campaign: Campaign, brand: Brand, post: Post
     { system: brandSystemPrompt(brand), prompt: copyPrompt(campaign, post), json: true, temperature: 0.85 },
   );
   const copy = copySchema.parse(parseJsonObject(out.text));
-  const hashtags = Array.from(
-    new Set(copy.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`).replace(/\s+/g, ""))),
-  ).slice(0, 20);
-  return {
-    caption: copy.caption.trim(),
-    hashtags: post.platform === "google_business" ? [] : hashtags,
-    imagePrompt: copy.image_prompt.trim(),
-    seoKeywords: copy.seo_keywords.slice(0, 8),
-    posterHeadline: (copy.poster_headline || campaign.theme).slice(0, 120),
-    posterCta: copy.poster_cta ? copy.poster_cta.slice(0, 60) : null,
-    /** true when the built-in demo generator wrote it (not a real AI model). */
-    demo: isDemoProvider(out.provider),
-  };
+  return normalise(copy, campaign, post, isDemoProvider(out.provider));
+}
+
+/** CTA instructions from the campaign brief (empty when the campaign has none). */
+function ctaRules(campaign: Campaign): string[] {
+  return [
+    campaign.callToAction && `End the caption with the call to action "${campaign.callToAction}". Use it as the poster CTA unless a shorter form is needed.`,
+    campaign.ctaUrl && `Put the CTA link ${campaign.ctaUrl} in the caption (except Instagram: say "link in bio").`,
+  ].filter((line): line is string => Boolean(line));
 }
 
 // ---------- Batch mode: several posts in one AI call (much faster, fewer requests) ----------
@@ -74,6 +73,7 @@ export function batchPrompt(campaign: Campaign, posts: Post[]): string {
     "TASK: POST_COPY_BATCH",
     `CAMPAIGN THEME: ${campaign.theme}`,
     `CAMPAIGN GOAL: ${campaign.goal ?? "grow reach and enquiries"}`,
+    ...campaignBriefLines(campaign),
     "",
     `Write the copy for each of these ${posts.length} posts. Each post must be different (new hook, new angle).`,
     ...posts.map(
@@ -82,23 +82,29 @@ export function batchPrompt(campaign: Campaign, posts: Post[]): string {
     ),
     "",
     "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text.",
+    ...ctaRules(campaign),
     'Poster headline: max 7 words printed on the image (e.g. "Diwali Gift Boxes 20% Off"). Poster CTA: 2-3 words (e.g. "Order Now").',
     "Image prompt: one on-brand visual (subject, setting, brand colours, mood). No text in the image.",
     'Reply with JSON only: {"posts": [{"id": 123, "caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_cta": "..."}]}',
   ].join("\n");
 }
 
-type CopyResult = Awaited<ReturnType<typeof writePostCopy>>;
+type CopyResult = ReturnType<typeof normalise>;
 
-function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: Post, demo: boolean): CopyResult {
-  const hashtags = Array.from(new Set(copy.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`).replace(/\s+/g, "")))).slice(0, 20);
+function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: Post, demo: boolean) {
+  // Campaign hashtags go first so the 20-tag cap never drops them.
+  const hashtags = Array.from(
+    new Set([...campaign.hashtags, ...copy.hashtags].map((h) => (h.startsWith("#") ? h : `#${h}`).replace(/\s+/g, ""))),
+  ).slice(0, 20);
+  const cta = copy.poster_cta || campaign.callToAction;
   return {
     caption: copy.caption.trim(),
     hashtags: post.platform === "google_business" ? [] : hashtags,
     imagePrompt: copy.image_prompt.trim(),
     seoKeywords: copy.seo_keywords.slice(0, 8),
     posterHeadline: (copy.poster_headline || campaign.theme).slice(0, 120),
-    posterCta: copy.poster_cta ? copy.poster_cta.slice(0, 60) : null,
+    posterCta: cta ? cta.slice(0, 60) : null,
+    /** true when the built-in demo generator wrote it (not a real AI model). */
     demo,
   };
 }

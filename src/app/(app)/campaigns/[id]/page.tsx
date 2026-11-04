@@ -15,6 +15,9 @@ import { requireAuth } from "@/lib/auth";
 import { getBrand, getCampaign, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 import { campaignJobProblem } from "@/jobs/queue";
+import type { Campaign } from "@/db/schema";
+import { allowedFormats } from "@/agent/planner";
+import { campaignTypeLabel, FORMAT_LABELS } from "@/lib/campaign-types";
 
 const TEMPLATE_LABELS: Record<string, string> = { band: "Bottom band", top: "Top headline", center: "Centre card" };
 
@@ -79,6 +82,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           . This page updates by itself.
         </p>
       )}
+      <CampaignBrief campaign={campaign} />
       {campaign.strategy && (
         <div className="card">
           <h2 className="mb-1 font-semibold">Strategy</h2>
@@ -252,6 +256,48 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           </article>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** The brief the campaign was planned from: only the fields that were filled in. */
+function CampaignBrief({ campaign }: { campaign: Campaign }) {
+  const rows: [string, React.ReactNode][] = [
+    ["Type", campaignTypeLabel(campaign.campaignType)],
+    ["Goal", campaign.goal],
+    ["Audience", campaign.audience],
+    ["Event date", campaign.eventDate],
+    ["Location", campaign.location],
+    ["Call to action", campaign.callToAction],
+    [
+      "Link",
+      campaign.ctaUrl && (
+        <a href={campaign.ctaUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{campaign.ctaUrl}</a>
+      ),
+    ],
+    ["Language", campaign.language],
+    ["Hashtags", campaign.hashtags.join(" ")],
+    ["Formats", allowedFormats(campaign).map((f) => FORMAT_LABELS[f] ?? f).join(", ")],
+  ];
+  return (
+    <div className="card">
+      <h2 className="mb-2 font-semibold">Brief</h2>
+      <dl className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-[140px_1fr]">
+        {rows
+          .filter(([, value]) => Boolean(value))
+          .map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-zinc-500">{label}</dt>
+              <dd className="text-zinc-800">{value}</dd>
+            </div>
+          ))}
+      </dl>
+      {campaign.keyFacts && (
+        <div className="mt-3 border-t border-zinc-100 pt-3">
+          <p className="mb-1 text-sm text-zinc-500">Key facts</p>
+          <p className="whitespace-pre-line text-sm text-zinc-800">{campaign.keyFacts}</p>
+        </div>
+      )}
     </div>
   );
 }

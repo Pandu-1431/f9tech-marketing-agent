@@ -98,6 +98,16 @@ export async function createCampaign(
     startDate: string;
     endDate: string;
     postsPerWeek: number;
+    campaignType?: string;
+    audience?: string | null;
+    keyFacts?: string | null;
+    eventDate?: string | null;
+    location?: string | null;
+    callToAction?: string | null;
+    ctaUrl?: string | null;
+    language?: string | null;
+    hashtags?: string[];
+    formats?: string[];
   },
 ) {
   const brand = await getBrand(workspaceId, input.brandId);

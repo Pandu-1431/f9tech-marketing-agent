@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import type { Brand, Campaign } from "@/db/schema";
+import { campaignArc, campaignTypeLabel } from "@/lib/campaign-types";
 import { freePlan } from "@/lib/config";
 import { brandSystemPrompt } from "./brand-context";
 import { parseJsonObject } from "./json";
@@ -29,20 +30,44 @@ export function targetPostCount(c: Pick<Campaign, "startDate" | "endDate" | "pos
   return Math.max(1, Math.min(count, freePlan().maxPostsPerCampaign));
 }
 
+/** The formats this campaign may use (all of them when none are set). */
+export function allowedFormats(c: Pick<Campaign, "formats">): string[] {
+  const picked = (c.formats ?? []).filter((f) => (FORMATS as readonly string[]).includes(f));
+  return picked.length ? picked : [...FORMATS];
+}
+
+/** The campaign brief lines shared by the planner and copywriter prompts (only the parts that are set). */
+export function campaignBriefLines(c: Campaign): string[] {
+  return [
+    `CAMPAIGN_TYPE: ${campaignTypeLabel(c.campaignType)}`,
+    c.audience && `AUDIENCE: ${c.audience}`,
+    c.eventDate && `EVENT_DATE: ${c.eventDate}`,
+    c.location && `LOCATION: ${c.location}`,
+    c.keyFacts && `KEY FACTS (the only facts, numbers, dates and contacts you may use):\n${c.keyFacts}`,
+    c.callToAction && `CALL TO ACTION: ${c.callToAction}`,
+    c.ctaUrl && `CTA LINK: ${c.ctaUrl}`,
+    c.language && `LANGUAGE: ${c.language} (overrides the brand language)`,
+    c.hashtags.length > 0 && `CAMPAIGN HASHTAGS (use in every post): ${c.hashtags.join(" ")}`,
+  ].filter((line): line is string => Boolean(line));
+}
+
 export function plannerPrompt(c: Campaign, postCount: number): string {
+  const formats = allowedFormats(c);
   return [
     "TASK: CAMPAIGN_PLAN",
     `THEME: ${c.theme}`,
     `GOAL: ${c.goal ?? "grow reach and enquiries"}`,
+    ...campaignBriefLines(c),
     `PLATFORMS: ${c.platforms.join(", ")}`,
+    `FORMATS: ${formats.join(", ")}`,
     `START_DATE: ${c.startDate}`,
     `END_DATE: ${c.endDate}`,
     `POST_COUNT: ${postCount}`,
     "",
     "Plan a content calendar for this campaign.",
     `- Exactly ${postCount} posts, spread across the dates (inclusive), spread across the platforms.`,
-    "- Vary the formats (image, carousel, reel, story, text) to suit each platform.",
-    "- Build a story: awareness first, then value/offer, then urgency/reminder.",
+    `- Use only these formats: ${formats.join(", ")}. Vary them to suit each platform.`,
+    `- ${campaignArc(c.campaignType)}`,
     "- Each angle is one or two sentences: the specific idea of that post.",
     'Reply with JSON only: {"strategy": "2-3 sentences", "posts": [{"date": "YYYY-MM-DD", "platform": "instagram", "format": "image", "angle": "..."}]}',
   ].join("\n");
@@ -58,6 +83,7 @@ export async function planCampaign(campaign: Campaign, brand: Brand) {
 
   const plan = planSchema.parse(parseJsonObject(out.text));
   const allowed = new Set(campaign.platforms);
+  const formats = allowedFormats(campaign);
   const picked = plan.posts.slice(0, postCount);
   const span = Math.round((Date.parse(campaign.endDate) - Date.parse(campaign.startDate)) / 86400000);
   const evenDate = (i: number) =>
@@ -70,7 +96,7 @@ export async function planCampaign(campaign: Campaign, brand: Brand) {
     // and platforms inside the chosen list.
     const date = p.date < campaign.startDate || p.date > campaign.endDate ? evenDate(i) : p.date;
     const platform = allowed.has(p.platform) ? p.platform : campaign.platforms[i % campaign.platforms.length];
-    const format = (FORMATS as readonly string[]).includes(p.format) ? p.format : "image";
+    const format = formats.includes(p.format) ? p.format : formats[i % formats.length];
     return {
       workspaceId: campaign.workspaceId,
       campaignId: campaign.id,

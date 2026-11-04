@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { listCampaigns } from "@/lib/data";
 import { StatusBadge } from "@/components/status-badge";
+import { campaignTypeLabel } from "@/lib/campaign-types";
 
 export default async function CampaignsPage() {
   const { workspace } = await requireAuth();
@@ -21,6 +22,7 @@ export default async function CampaignsPage() {
             <thead className="border-b border-zinc-200 text-xs text-zinc-500">
               <tr>
                 <th className="px-5 py-3">Theme</th>
+                <th>Type</th>
                 <th>Business</th>
                 <th>Dates</th>
                 <th>Platforms</th>
@@ -33,6 +35,7 @@ export default async function CampaignsPage() {
                   <td className="px-5 py-3">
                     <Link href={`/campaigns/${campaign.id}`} className="font-medium hover:text-indigo-600">{campaign.theme}</Link>
                   </td>
+                  <td className="text-zinc-600">{campaignTypeLabel(campaign.campaignType)}</td>
                   <td>{brandName}</td>
                   <td className="text-zinc-600">{campaign.startDate} → {campaign.endDate}</td>
                   <td className="text-zinc-600">{campaign.platforms.join(", ")}</td>

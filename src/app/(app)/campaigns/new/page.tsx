@@ -16,7 +16,7 @@ export default async function NewCampaignPage() {
           Add a business account first. <Link href="/brands/new" className="text-indigo-600">Add one</Link>
         </div>
       ) : (
-        <CampaignForm brands={brands.map((b) => ({ id: b.id, name: b.name, platforms: b.platforms }))} today={today} />
+        <CampaignForm brands={brands.map((b) => ({ id: b.id, name: b.name, platforms: b.platforms, language: b.language }))} today={today} />
       )}
     </div>
   );

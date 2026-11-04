@@ -109,6 +109,19 @@ export const campaigns = pgTable(
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
     postsPerWeek: integer("posts_per_week").default(3).notNull(),
+    // Campaign brief. Type picks the planner's story arc (see src/lib/campaign-types.ts).
+    campaignType: varchar("campaign_type", { length: 30 }).default("general").notNull(),
+    audience: text("audience"),
+    // Real facts (venue, timings, numbers, contacts). The only source the AI may take facts from.
+    keyFacts: text("key_facts"),
+    eventDate: date("event_date"),
+    location: varchar("location", { length: 200 }),
+    callToAction: varchar("call_to_action", { length: 60 }),
+    ctaUrl: varchar("cta_url", { length: 300 }),
+    // Empty = the brand's language.
+    language: varchar("language", { length: 60 }),
+    hashtags: jsonb("hashtags").$type<string[]>().default([]).notNull(),
+    formats: jsonb("formats").$type<string[]>().default(["image", "carousel", "reel", "story", "text"]).notNull(),
     // draft | planning | writing | ready | failed
     status: varchar("status", { length: 20 }).default("draft").notNull(),
     strategy: text("strategy"),
