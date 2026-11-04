@@ -62,6 +62,27 @@ export const memberships = pgTable(
   (t) => [uniqueIndex("memberships_ws_user").on(t.workspaceId, t.userId)],
 );
 
+// Invite link to join a workspace. Only a SHA-256 hash of the token is stored; the link is shown once.
+export const invites = pgTable(
+  "invites",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 20 }).default("client").notNull(), // client | editor
+    label: varchar("label", { length: 120 }), // who it is for, e.g. "Ravi (client)" — shown to the owner only
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedBy: integer("accepted_by").references(() => users.id, { onDelete: "set null" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("invites_ws").on(t.workspaceId)],
+);
+
 // A brand = one business account inside a workspace. Its fields are the Brand Kit.
 export const brands = pgTable(
   "brands",
@@ -334,3 +355,4 @@ export type Job = typeof jobs.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
 export type PostVersion = typeof postVersions.$inferSelect;
 export type Approval = typeof approvals.$inferSelect;
+export type Invite = typeof invites.$inferSelect;

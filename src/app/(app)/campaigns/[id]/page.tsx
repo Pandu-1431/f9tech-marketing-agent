@@ -12,6 +12,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import { StatusBadge } from "@/components/status-badge";
 import { requireAuth } from "@/lib/auth";
+import { canEditContent } from "@/lib/team";
 import { campaignHistory, getBrand, getCampaign, isApprovedForPublish, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 import { campaignJobProblem } from "@/jobs/queue";
@@ -38,7 +39,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const designing = posts.filter((p) => p.status !== "idea" && (p.designStatus === "designing" || (campaign.status === "ready" && p.designStatus === "none")));
   const working =
     campaign.status === "planning" || campaign.status === "writing" || campaign.status === "draft" || posts.some((p) => p.status === "idea") || designing.length > 0 || makingVideos > 0;
-  const canEdit = role !== "client";
+  const canEdit = canEditContent(role);
   const drafted = posts.filter((p) => p.status !== "idea").length;
 
   return (

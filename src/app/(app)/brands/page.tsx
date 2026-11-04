@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import { canEditContent } from "@/lib/team";
 import { freePlan } from "@/lib/config";
 import { listBrands } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
 export default async function BrandsPage() {
-  const { workspace } = await requireAuth();
+  const { workspace, role } = await requireAuth();
+  const canEdit = canEditContent(role);
   const brands = await listBrands(workspace.id);
   const max = freePlan().maxBrands;
 
@@ -18,7 +20,7 @@ export default async function BrandsPage() {
             {brands.length} of {max} on the free plan. Each one has its own Brand Kit.
           </p>
         </div>
-        {brands.length < max ? (
+        {!canEdit ? null : brands.length < max ? (
           <Link href="/brands/new" className="btn">Add business account</Link>
         ) : (
           <span className="text-sm text-zinc-500">Free plan limit reached</span>
@@ -30,7 +32,7 @@ export default async function BrandsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {brands.map((b) => (
-            <Link key={b.id} href={`/brands/${b.id}`} className="card block hover:border-indigo-300">
+            <Link key={b.id} href={canEdit ? `/brands/${b.id}` : "/campaigns"} className="card block hover:border-indigo-300">
               <div className="flex items-center justify-between">
                 <h2 className="flex items-center gap-2 font-semibold">
                   {b.logoKey && (

@@ -1,18 +1,20 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import { canEditContent } from "@/lib/team";
 import { listCampaigns } from "@/lib/data";
 import { StatusBadge } from "@/components/status-badge";
 import { campaignTypeLabel } from "@/lib/campaign-types";
 
 export default async function CampaignsPage() {
-  const { workspace } = await requireAuth();
+  const { workspace, role } = await requireAuth();
+  const canEdit = canEditContent(role);
   const campaigns = await listCampaigns(workspace.id);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Campaigns</h1>
-        <Link href="/campaigns/new" className="btn">New campaign</Link>
+        {canEdit && <Link href="/campaigns/new" className="btn">New campaign</Link>}
       </div>
       {campaigns.length === 0 ? (
         <div className="card text-sm text-zinc-500">No campaigns yet. Create one from a theme.</div>

@@ -4,20 +4,28 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction, registerAction, type FormState } from "@/app/actions/auth";
 
-export function AuthForm({ mode }: { mode: "login" | "register" }) {
+export function AuthForm({ mode, invite, next, title, subtitle }: { mode: "login" | "register"; invite?: string; next?: string; title?: string; subtitle?: string }) {
   const action = mode === "login" ? loginAction : registerAction;
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
 
   return (
     <form action={formAction} className="card w-full max-w-md space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">{mode === "login" ? "Log in" : "Create your free account"}</h1>
+        <h1 className="text-xl font-semibold">{title ?? (mode === "login" ? "Log in" : "Create your free account")}</h1>
         <p className="text-sm text-zinc-500">
-          {mode === "login" ? "Welcome back." : "Free plan: up to 4 business accounts. No card needed."}
+          {subtitle ?? (mode === "login" ? "Welcome back." : "Free plan: up to 4 business accounts. No card needed.")}
         </p>
       </div>
+      {invite && <input type="hidden" name="invite" value={invite} />}
+      {next && <input type="hidden" name="next" value={next} />}
 
-      {mode === "register" && (
+      {mode === "register" && invite && (
+        <div>
+          <label className="label" htmlFor="name">Your name</label>
+          <input className="input" id="name" name="name" required />
+        </div>
+      )}
+      {mode === "register" && !invite && (
         <>
           <div>
             <label className="label" htmlFor="name">Your name</label>
@@ -55,9 +63,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
       <p className="text-center text-sm text-zinc-500">
         {mode === "login" ? (
-          <>No account? <Link className="text-indigo-600" href="/register">Sign up free</Link></>
+          <>No account? <Link className="text-indigo-600" href={next ?? "/register"}>{next ? "Create one from the invite" : "Sign up free"}</Link></>
         ) : (
-          <>Already have an account? <Link className="text-indigo-600" href="/login">Log in</Link></>
+          <>Already have an account? <Link className="text-indigo-600" href={invite ? `/login?next=${encodeURIComponent(`/invite/${invite}`)}` : "/login"}>Log in</Link></>
         )}
       </p>
     </form>

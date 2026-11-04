@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import { canEditContent } from "@/lib/team";
 import { freePlan, textChain } from "@/lib/config";
 import { countBrands, listCampaigns, postStatusCounts, recentGenerations } from "@/lib/data";
 import { workspaceTextUsageThisMonth } from "@/agent/router";
@@ -23,7 +24,8 @@ function Meter({ label, used, max }: { label: string; used: number; max: number 
 }
 
 export default async function DashboardPage() {
-  const { workspace } = await requireAuth();
+  const { workspace, role } = await requireAuth();
+  const canEdit = canEditContent(role);
   const plan = freePlan();
   const [brandCount, textUsed, imagesUsed, videosUsed, trial, counts, campaigns, gens] = await Promise.all([
     countBrands(workspace.id),
@@ -40,7 +42,7 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <Link href="/campaigns/new" className="btn">New campaign</Link>
+        {canEdit && <Link href="/campaigns/new" className="btn">New campaign</Link>}
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -67,7 +69,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {brandCount === 0 && (
+      {brandCount === 0 && canEdit && (
         <div className="card border-indigo-200 bg-indigo-50">
           <p className="font-medium">Start by adding your first business account.</p>
           <p className="text-sm text-zinc-600">The Brand Kit you fill in is used for every post the agent writes.</p>

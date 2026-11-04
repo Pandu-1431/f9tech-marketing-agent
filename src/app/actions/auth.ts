@@ -8,18 +8,27 @@ import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { getSession } from "@/lib/session";
 import { freePlan } from "@/lib/config";
+import { acceptInvite, findOpenInvite, TeamError } from "@/lib/team";
 import { clientIpFrom, FAILED_MESSAGE, lockedMessage, lockedUntil, recordFailure, recordSuccess, throttleKeys } from "@/lib/login-throttle";
 
 export type FormState = { error?: string } | undefined;
 
-const registerSchema = z.object({
-  name: z.string().trim().min(2, "Enter your name"),
-  business: z.string().trim().min(2, "Enter your business or agency name"),
-  email: z.email("Enter a valid email").transform((e) => e.toLowerCase()),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-});
+const baseRegister = {
+  name: z.string().trim().min(2, "Enter your name").max(120),
+  email: z.email("Enter a valid email").max(200).transform((e) => e.toLowerCase()),
+  password: z.string().min(8, "Password must be at least 8 characters").max(200),
+};
+const registerSchema = z.object({ ...baseRegister, business: z.string().trim().min(2, "Enter your business or agency name").max(160) });
+const inviteRegisterSchema = z.object({ ...baseRegister, invite: z.string().min(10).max(100) });
+
+/** Only same-site invite pages are allowed as a "next" target after login (no open redirect). */
+function safeNext(next: FormDataEntryValue | null): string {
+  const v = String(next ?? "");
+  return /^\/invite\/[A-Za-z0-9_-]{10,100}$/.test(v) ? v : "/dashboard";
+}
 
 export async function registerAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (formData.get("invite")) return registerWithInvite(formData);
   const parsed = registerSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form" };
   const { name, business, email, password } = parsed.data;
@@ -42,6 +51,32 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
 
   const session = await getSession();
   session.userId = userId;
+  await session.save();
+  redirect("/dashboard");
+}
+
+/** Sign-up from an invite link: the new user joins that workspace only (no workspace of their own). */
+async function registerWithInvite(formData: FormData): Promise<FormState> {
+  const parsed = inviteRegisterSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form" };
+  const { name, email, password, invite: token } = parsed.data;
+  if (!(await findOpenInvite(token))) return { error: "This invite link has expired or was already used. Ask for a new one." };
+
+  const db = await getDb();
+  const [existing] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email));
+  if (existing) return { error: "An account with this email already exists. Log in to accept the invite." };
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const [user] = await db.insert(schema.users).values({ name, email, passwordHash }).returning();
+  try {
+    await acceptInvite(token, user.id);
+  } catch (err) {
+    await db.delete(schema.users).where(eq(schema.users.id, user.id)); // don't leave an account with no workspace
+    if (err instanceof TeamError) return { error: err.message };
+    throw err;
+  }
+  const session = await getSession();
+  session.userId = user.id;
   await session.save();
   redirect("/dashboard");
 }
@@ -72,10 +107,16 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   }
 
   await recordSuccess(keys);
+  const next = safeNext(formData.get("next"));
+  if (next === "/dashboard") {
+    // E.g. a client reviewer who was removed from the only workspace they had.
+    const [m] = await db.select({ id: schema.memberships.id }).from(schema.memberships).where(eq(schema.memberships.userId, user.id)).limit(1);
+    if (!m) return { error: "Your account is not part of any workspace now. Ask the owner for a new invite link." };
+  }
   const session = await getSession();
   session.userId = user.id;
   await session.save();
-  redirect("/dashboard");
+  redirect(next);
 }
 
 export async function logoutAction() {

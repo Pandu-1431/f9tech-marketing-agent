@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getSession } from "./session";
+import { canEditContent, canManageTeam } from "./team";
 
 export type AuthContext = {
   user: { id: number; name: string; email: string };
@@ -42,10 +43,17 @@ export async function requireAuth(): Promise<AuthContext> {
   return auth;
 }
 
-/** Client reviewers can approve and comment, but not change settings. */
+/** Client reviewers can view, approve and reject, but not change content or settings. */
 export async function requireEditor(): Promise<AuthContext> {
   const auth = await requireAuth();
-  if (auth.role === "client") redirect("/dashboard");
+  if (!canEditContent(auth.role)) redirect("/dashboard");
+  return auth;
+}
+
+/** Only the workspace owner manages the team. */
+export async function requireOwner(): Promise<AuthContext> {
+  const auth = await requireAuth();
+  if (!canManageTeam(auth.role)) redirect("/dashboard");
   return auth;
 }
 
@@ -56,4 +64,16 @@ export async function isMember(userId: number, workspaceId: number): Promise<boo
     .from(schema.memberships)
     .where(and(eq(schema.memberships.userId, userId), eq(schema.memberships.workspaceId, workspaceId)));
   return Boolean(row);
+}
+
+/** The logged-in user even if they belong to no workspace yet (used by the invite page). */
+export async function getSessionUser(): Promise<{ id: number; name: string; email: string } | null> {
+  const session = await getSession();
+  if (!session.userId) return null;
+  const db = await getDb();
+  const [user] = await db
+    .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email })
+    .from(schema.users)
+    .where(eq(schema.users.id, session.userId));
+  return user ?? null;
 }

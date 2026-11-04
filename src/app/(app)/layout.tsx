@@ -2,10 +2,12 @@ import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
 import { requireAuth } from "@/lib/auth";
 import { trialInfo } from "@/lib/plan";
+import { canEditContent, canManageTeam, listMyWorkspaces, ROLE_LABELS } from "@/lib/team";
+import { switchWorkspaceAction } from "@/app/actions/team";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, workspace } = await requireAuth();
-  const trial = await trialInfo(workspace.id);
+  const { user, workspace, role } = await requireAuth();
+  const [trial, myWorkspaces] = await Promise.all([trialInfo(workspace.id), listMyWorkspaces(user.id)]);
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -17,9 +19,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/brands" className="hover:text-zinc-900">Business accounts</Link>
             <Link href="/campaigns" className="hover:text-zinc-900">Campaigns</Link>
             <Link href="/library" className="hover:text-zinc-900">Library</Link>
-            <Link href="/settings/ai" className="hover:text-zinc-900">AI connections</Link>
+            {canEditContent(role) && <Link href="/settings/ai" className="hover:text-zinc-900">AI connections</Link>}
+            {canManageTeam(role) && <Link href="/settings/team" className="hover:text-zinc-900">Team</Link>}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
+            {myWorkspaces.length > 1 && (
+              <form action={switchWorkspaceAction} className="flex items-center gap-1">
+                <select name="workspaceId" defaultValue={workspace.id} className="rounded-md border border-zinc-200 px-1.5 py-1 text-xs" aria-label="Workspace">
+                  {myWorkspaces.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name} ({ROLE_LABELS[w.role] ?? w.role})</option>
+                  ))}
+                </select>
+                <button className="text-xs text-indigo-600">Switch</button>
+              </form>
+            )}
+            {role === "client" && <span className="badge bg-sky-50 text-sky-700" data-testid="client-badge">Client reviewer</span>}
             <span className="text-zinc-500">
               {workspace.name} ·{" "}
               {!trial.enabled ? (
