@@ -78,3 +78,30 @@ test("demo output is clearly labelled and cannot be approved", async ({ page }) 
   await page.goto("/library");
   await expect(page.getByTestId("demo-stamp").first()).toBeVisible();
 });
+
+test("approval locks a version: changing the poster sends the post back to review, then re-approve", async ({ page }) => {
+  await register(page, { email: uniqueEmail("lock") });
+  await createBrand(page, { name: "Lock Test Co", colors: "#0F766E" });
+  const url = await createCampaign(page, { theme: "Diwali offers for families" });
+  await waitForCampaignDone(page, url);
+
+  const card = postCard(page, 0);
+  await card.getByRole("button", { name: /^Approve v\d+$/ }).click();
+  await expect(card.locator("header")).toContainText("approved");
+  await expect(card.getByTestId("approval-line")).toContainText(/Approved v\d+ by/);
+
+  // Change the poster text after approval (this used to keep the "approved" status).
+  await card.locator("input[name=posterHeadline]").fill("Changed after approval");
+  await card.getByRole("button", { name: "Update", exact: true }).click();
+  await expect(async () => {
+    await page.reload();
+    await expect(postCard(page, 0).locator("header")).not.toContainText("approved", { timeout: 1000 });
+    await expect(postCard(page, 0).getByTestId("approval-line")).toContainText("needs review again", { timeout: 1000 });
+  }).toPass({ timeout: 60_000, intervals: [2000] });
+
+  // Re-approve the new version.
+  await postCard(page, 0).getByRole("button", { name: /^Approve v\d+$/ }).click();
+  await expect(postCard(page, 0).locator("header")).toContainText("approved");
+  await postCard(page, 0).locator("summary", { hasText: "History" }).click();
+  await expect(postCard(page, 0).getByText("New poster").first()).toBeVisible();
+});

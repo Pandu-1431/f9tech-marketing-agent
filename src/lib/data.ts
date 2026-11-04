@@ -190,13 +190,168 @@ export class DemoContentError extends Error {
   }
 }
 
-/** Approve or reject a post. Approval is refused while any part is demo content. */
-export async function reviewPost(workspaceId: number, postId: number, decision: "approved" | "rejected", note: string | null) {
+// ---------- Versions and approval ----------
+
+export type VersionReason = "caption" | "ai_write" | "ai_rewrite" | "poster" | "reel";
+
+export class StaleVersionError extends Error {
+  constructor() {
+    super("This post changed while you were reviewing it. Check the latest version and approve again.");
+    this.name = "StaleVersionError";
+  }
+}
+
+export class BusyPostError extends Error {
+  constructor() {
+    super("The poster or video for this post is still being made. Approve it when it is ready.");
+    this.name = "BusyPostError";
+  }
+}
+
+/**
+ * Saves the post's current caption + latest poster/video as a new frozen version.
+ * Call after EVERY change to what would be published. If the post was approved or
+ * rejected, it goes back to "drafted" (needs review): an approval covers one version only.
+ */
+export async function recordPostVersion(workspaceId: number, postId: number, reason: VersionReason, userId: number | null = null) {
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    const [post] = await tx
+      .update(schema.posts)
+      .set({
+        currentVersion: sql`${schema.posts.currentVersion} + 1`,
+        status: sql`CASE WHEN ${schema.posts.status} IN ('approved', 'rejected') THEN 'drafted' ELSE ${schema.posts.status} END`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId)))
+      .returning();
+    if (!post) return null;
+    const latest = async (kind: "poster" | "video") => {
+      const [a] = await tx
+        .select({ id: schema.assets.id })
+        .from(schema.assets)
+        .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.postId, postId), eq(schema.assets.kind, kind)))
+        .orderBy(desc(schema.assets.id))
+        .limit(1);
+      return a?.id ?? null;
+    };
+    const [version] = await tx
+      .insert(schema.postVersions)
+      .values({
+        workspaceId,
+        postId,
+        version: post.currentVersion,
+        reason,
+        caption: post.caption,
+        hashtags: post.hashtags,
+        imagePrompt: post.imagePrompt,
+        posterHeadline: post.posterHeadline,
+        posterCta: post.posterCta,
+        posterAssetId: await latest("poster"),
+        videoAssetId: await latest("video"),
+        demoParts: post.demoParts,
+        createdBy: userId,
+      })
+      .returning();
+    return version;
+  });
+}
+
+/**
+ * Approve or reject one version of a post.
+ * - `version` is the version the reviewer was looking at; if the post has changed since, StaleVersionError.
+ * - Approval is refused while any part is demo content, or while a poster/video is still being made.
+ * Every decision is logged in `approvals` with who, when and which version.
+ */
+export async function reviewPost(
+  workspaceId: number,
+  postId: number,
+  decision: "approved" | "rejected",
+  note: string | null,
+  by: { userId: number | null; version: number },
+) {
   const post = await getPost(workspaceId, postId);
   if (!post) return null;
-  if (decision === "approved" && post.demoParts.length > 0) throw new DemoContentError();
-  return updatePost(workspaceId, postId, { status: decision, reviewNote: note });
+  if (post.currentVersion < 1 || post.status === "idea") throw new StaleVersionError();
+  if (by.version !== post.currentVersion) throw new StaleVersionError();
+  if (decision === "approved") {
+    if (post.demoParts.length > 0) throw new DemoContentError();
+    if (post.designStatus === "designing" || post.reelStatus === "making") throw new BusyPostError();
+  }
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    // Conditional update: only if nobody changed the post in the meantime.
+    const [row] = await tx
+      .update(schema.posts)
+      .set({ status: decision, reviewNote: note, approvedVersion: decision === "approved" ? by.version : null, updatedAt: new Date() })
+      .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId), eq(schema.posts.currentVersion, by.version)))
+      .returning();
+    if (!row) throw new StaleVersionError();
+    await tx.insert(schema.approvals).values({ workspaceId, postId, version: by.version, decision, note, userId: by.userId });
+    return row;
+  });
 }
+
+/** True only when the post is approved AND nothing changed since. Publishing must check this. */
+export function isApprovedForPublish(post: { status: string; currentVersion: number; approvedVersion: number | null }) {
+  return post.status === "approved" && post.approvedVersion !== null && post.approvedVersion === post.currentVersion;
+}
+
+/** Version history and approval log for the campaign page. */
+export async function postHistory(workspaceId: number, postId: number) {
+  const db = await getDb();
+  const versions = await db
+    .select({ v: schema.postVersions, by: schema.users.name })
+    .from(schema.postVersions)
+    .leftJoin(schema.users, eq(schema.users.id, schema.postVersions.createdBy))
+    .where(and(eq(schema.postVersions.workspaceId, workspaceId), eq(schema.postVersions.postId, postId)))
+    .orderBy(desc(schema.postVersions.version));
+  const reviews = await db
+    .select({ a: schema.approvals, by: schema.users.name })
+    .from(schema.approvals)
+    .leftJoin(schema.users, eq(schema.users.id, schema.approvals.userId))
+    .where(and(eq(schema.approvals.workspaceId, workspaceId), eq(schema.approvals.postId, postId)))
+    .orderBy(desc(schema.approvals.id));
+  return {
+    versions: versions.map((r) => ({ ...r.v, byName: r.by })),
+    reviews: reviews.map((r) => ({ ...r.a, byName: r.by })),
+  };
+}
+
+/** Version history and approval log for every post in a campaign, newest first (one query each). */
+export async function campaignHistory(workspaceId: number, campaignId: number) {
+  const db = await getDb();
+  const versions = await db
+    .select({ id: schema.postVersions.id, postId: schema.postVersions.postId, version: schema.postVersions.version, reason: schema.postVersions.reason, createdAt: schema.postVersions.createdAt, by: schema.users.name })
+    .from(schema.postVersions)
+    .innerJoin(schema.posts, eq(schema.posts.id, schema.postVersions.postId))
+    .leftJoin(schema.users, eq(schema.users.id, schema.postVersions.createdBy))
+    .where(and(eq(schema.postVersions.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId)))
+    .orderBy(desc(schema.postVersions.version));
+  const reviews = await db
+    .select({ a: schema.approvals, by: schema.users.name })
+    .from(schema.approvals)
+    .innerJoin(schema.posts, eq(schema.posts.id, schema.approvals.postId))
+    .leftJoin(schema.users, eq(schema.users.id, schema.approvals.userId))
+    .where(and(eq(schema.approvals.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId)))
+    .orderBy(desc(schema.approvals.id));
+  type Entry = { key: string; at: Date; version: number; kind: "version" | "approved" | "rejected"; label: string; by: string | null; note: string | null };
+  const byPost = new Map<number, Entry[]>();
+  const push = (postId: number, e: Entry) => byPost.set(postId, [...(byPost.get(postId) ?? []), e]);
+  for (const v of versions) push(v.postId, { key: `v${v.id}`, at: v.createdAt, version: v.version, kind: "version", label: VERSION_LABELS[v.reason] ?? v.reason, by: v.by, note: null });
+  for (const r of reviews) push(r.a.postId, { key: `a${r.a.id}`, at: r.a.createdAt, version: r.a.version, kind: r.a.decision as "approved" | "rejected", label: r.a.decision === "approved" ? "Approved" : "Rejected", by: r.by, note: r.a.note });
+  for (const list of byPost.values()) list.sort((x, y) => y.at.getTime() - x.at.getTime() || (x.kind === "version" ? 1 : -1));
+  return byPost;
+}
+
+const VERSION_LABELS: Record<string, string> = {
+  caption: "Caption edited",
+  ai_write: "AI wrote the caption",
+  ai_rewrite: "AI rewrote the caption",
+  poster: "New poster",
+  reel: "New reel video",
+  backfill: "Saved before version tracking",
+};
 
 // ---------- Dashboard ----------
 

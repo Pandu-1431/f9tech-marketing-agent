@@ -8,7 +8,7 @@ import { designPost } from "@/agent/designer";
 import { makeReel } from "@/agent/video/reel";
 import type { PosterTemplate } from "@/agent/images/poster";
 import { TrialEndedError } from "@/lib/plan";
-import { getBrand, getCampaign, setCampaignStatus, setDemoPart, updatePost } from "@/lib/data";
+import { getBrand, getCampaign, recordPostVersion, setCampaignStatus, setDemoPart, updatePost } from "@/lib/data";
 
 type Payload = Record<string, unknown>;
 type Handler = ((payload: Payload) => Promise<void>) & {
@@ -80,6 +80,7 @@ const writeCampaignJob: Handler = async (payload) => {
         const { demo, ...copy } = written.get(post.id) ?? (await writePostCopy(campaign, brand, post));
         await updatePost(workspaceId, post.id, { ...copy, status: "drafted" });
         await setDemoPart(workspaceId, post.id, "text", demo);
+        await recordPostVersion(workspaceId, post.id, "ai_write");
       } catch (err) {
         if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
           limitError = err;
@@ -124,6 +125,7 @@ const rewritePostJob: Handler = async (payload) => {
     const { demo, ...copy } = await writePostCopy(campaign, brand, post);
     await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null, designStatus: "designing" });
     await setDemoPart(workspaceId, post.id, "text", demo);
+    await recordPostVersion(workspaceId, post.id, "ai_rewrite");
     const fresh = { ...post, ...copy, status: "drafted" };
     await designPost(fresh, brand);
   } catch (err) {

@@ -11,7 +11,7 @@ import { QuotaExceededError } from "../router";
 import { renderSceneFrame, REEL_H, REEL_W } from "./frames";
 import { ffmpeg, tempDir, wavDurationSec } from "./ffmpeg";
 import { writeReelScriptWithProvider } from "./script";
-import { isDemoProvider, setDemoPart } from "@/lib/data";
+import { isDemoProvider, recordPostVersion, setDemoPart } from "@/lib/data";
 import { speak } from "./voice";
 import { mapLimit, parallelism } from "@/lib/concurrency";
 
@@ -199,7 +199,10 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
   const started = Date.now();
 
   const { script, provider: scriptProvider } = await writeReelScriptWithProvider(campaign, brand, post);
-  await db.update(schema.posts).set({ reelScript: script }).where(eq(schema.posts.id, post.id));
+  await db
+    .update(schema.posts)
+    .set({ reelScript: script })
+    .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
 
   const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script });
   const demoVideo = video.demoImages || isDemoProvider(scriptProvider);
@@ -239,7 +242,9 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
   await db
     .update(schema.posts)
     .set({ reelStatus: "done", reelError: null, reelScript: { ...script, voice: video.voiceProvider, durationSec: Math.round(video.durationSec) } })
-    .where(eq(schema.posts.id, post.id));
+    .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
   await setDemoPart(post.workspaceId, post.id, "video", demoVideo);
+  // New video = new version; an approved post goes back to review.
+  await recordPostVersion(post.workspaceId, post.id, "reel");
   return asset;
 }

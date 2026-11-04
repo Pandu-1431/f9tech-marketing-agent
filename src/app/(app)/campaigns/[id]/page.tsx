@@ -12,10 +12,10 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import { StatusBadge } from "@/components/status-badge";
 import { requireAuth } from "@/lib/auth";
-import { getBrand, getCampaign, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
+import { campaignHistory, getBrand, getCampaign, isApprovedForPublish, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 import { campaignJobProblem } from "@/jobs/queue";
-import type { Campaign } from "@/db/schema";
+import type { Campaign, Post } from "@/db/schema";
 import { allowedFormats } from "@/agent/planner";
 import { campaignTypeLabel, FORMAT_LABELS } from "@/lib/campaign-types";
 
@@ -26,11 +26,12 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const campaign = await getCampaign(workspace.id, Number(id));
   if (!campaign) notFound();
-  const [brand, posts, posters, videos] = await Promise.all([
+  const [brand, posts, posters, videos, history] = await Promise.all([
     getBrand(workspace.id, campaign.brandId),
     listCampaignPosts(workspace.id, campaign.id),
     latestPosters(workspace.id, campaign.id),
     latestVideos(workspace.id, campaign.id),
+    campaignHistory(workspace.id, campaign.id),
   ]);
   const makingVideos = posts.filter((p) => p.reelStatus === "making").length;
   const problem = await campaignJobProblem(workspace.id, campaign.id);
@@ -230,17 +231,21 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                   {canEdit && <button className="btn-secondary">Save edits</button>}
                 </form>
 
+                <ApprovalLine post={post} entries={history.get(post.id) ?? []} />
                 <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3">
                   <form action={reviewPostAction.bind(null, post.id, "approved")} className="flex gap-2">
+                    {/* The version on screen: approval is refused if the post changed after the page loaded. */}
+                    <input type="hidden" name="version" value={post.currentVersion} />
                     <button
                       className="btn"
-                      disabled={post.demoParts.length > 0}
-                      title={post.demoParts.length > 0 ? "Demo content cannot be approved" : undefined}
+                      disabled={Boolean(approveBlocker(post)) || isApprovedForPublish(post)}
+                      title={approveBlocker(post) ?? (isApprovedForPublish(post) ? "Already approved" : undefined)}
                     >
-                      Approve
+                      {isApprovedForPublish(post) ? "Approved" : `Approve v${post.currentVersion}`}
                     </button>
                   </form>
                   <form action={reviewPostAction.bind(null, post.id, "rejected")} className="flex flex-1 gap-2">
+                    <input type="hidden" name="version" value={post.currentVersion} />
                     <input className="input" name="note" placeholder="What should change? (optional)" defaultValue={post.reviewNote ?? ""} />
                     <button className="btn-danger">Reject</button>
                   </form>
@@ -297,6 +302,58 @@ function CampaignBrief({ campaign }: { campaign: Campaign }) {
           <p className="mb-1 text-sm text-zinc-500">Key facts</p>
           <p className="whitespace-pre-line text-sm text-zinc-800">{campaign.keyFacts}</p>
         </div>
+      )}
+    </div>
+  );
+}
+
+type HistoryEntry = { key: string; at: Date; version: number; kind: "version" | "approved" | "rejected"; label: string; by: string | null; note: string | null };
+
+/** Why the Approve button is off, or null when the post can be approved. */
+function approveBlocker(post: Post): string | null {
+  if (post.demoParts.length > 0) return "Demo content cannot be approved";
+  if (post.designStatus === "designing" || post.reelStatus === "making") return "Wait until the poster and video are ready";
+  if (post.currentVersion < 1) return "Nothing to approve yet";
+  return null;
+}
+
+/** "Approved v3 by Ravi · 2 Nov" or "Changed after approval of v3 — needs review", plus the full history. */
+function ApprovalLine({ post, entries }: { post: Post; entries: HistoryEntry[] }) {
+  const lastApproval = entries.find((e) => e.kind === "approved");
+  const when = (d: Date) => d.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  let summary: React.ReactNode = null;
+  if (isApprovedForPublish(post) && lastApproval) {
+    summary = (
+      <p className="text-sm text-emerald-700" data-testid="approval-line">
+        Approved v{post.approvedVersion} by {lastApproval.by ?? "—"} · {when(lastApproval.at)}
+      </p>
+    );
+  } else if (post.approvedVersion !== null && post.status === "drafted") {
+    summary = (
+      <p className="text-sm text-amber-700" data-testid="approval-line">
+        Changed after v{post.approvedVersion} was approved. Now v{post.currentVersion}: needs review again.
+      </p>
+    );
+  }
+  if (!summary && entries.length === 0) return null;
+  return (
+    <div className="space-y-1">
+      {summary}
+      {entries.length > 0 && (
+        <details className="text-xs text-zinc-600">
+          <summary className="cursor-pointer">History (v{post.currentVersion})</summary>
+          <ul className="mt-1 space-y-0.5">
+            {entries.map((e) => (
+              <li key={e.key}>
+                <span className={e.kind === "approved" ? "text-emerald-700" : e.kind === "rejected" ? "text-red-600" : undefined}>
+                  v{e.version} · {e.label}
+                </span>
+                {e.by ? ` by ${e.by}` : e.kind === "version" ? " by the agent" : ""} · {when(e.at)}
+                {e.note ? ` — “${e.note}”` : ""}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );

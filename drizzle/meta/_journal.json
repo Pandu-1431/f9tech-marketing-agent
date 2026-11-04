@@ -43,6 +43,13 @@
       "when": 1793080859062,
       "tag": "0005_campaign_brief",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793794796155,
+      "tag": "0006_approval_versions",
+      "breakpoints": true
     }
   ]
 }

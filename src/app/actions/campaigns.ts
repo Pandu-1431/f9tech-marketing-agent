@@ -10,9 +10,12 @@ import {
   DemoContentError,
   getCampaign,
   getPost,
+  BusyPostError,
   LimitError,
   listCampaignPosts,
+  recordPostVersion,
   reviewPost,
+  StaleVersionError,
   setCampaignStatus,
   setDemoPart,
   updatePost,
@@ -111,21 +114,23 @@ export async function createCampaignAction(_prev: FormState, formData: FormData)
 }
 
 export async function reviewPostAction(postId: number, decision: "approved" | "rejected", formData: FormData) {
-  const { workspace } = await requireAuth(); // client reviewers may approve too
+  const { workspace, user } = await requireAuth(); // client reviewers may approve too
   const post = await getPost(workspace.id, postId);
   if (!post) return;
   const note = String(formData.get("note") ?? "").trim() || null;
+  // The version the reviewer saw on screen. If the post changed since, the approval is refused.
+  const version = Number(formData.get("version"));
   try {
-    await reviewPost(workspace.id, postId, decision, note);
+    await reviewPost(workspace.id, postId, decision, note, { userId: user.id, version });
   } catch (err) {
-    // Demo content: the button is disabled in the UI; this is the server-side guard.
-    if (!(err instanceof DemoContentError)) throw err;
+    // Demo / busy / stale: the UI shows the reason on the card; these are the server-side guards.
+    if (!(err instanceof DemoContentError || err instanceof StaleVersionError || err instanceof BusyPostError)) throw err;
   }
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
 
 export async function editPostAction(postId: number, formData: FormData) {
-  const { workspace } = await requireEditor();
+  const { workspace, user } = await requireEditor();
   const post = await getPost(workspace.id, postId);
   if (!post) return;
   const hashtags = parseHashtags(formData.get("hashtags"));
@@ -137,6 +142,7 @@ export async function editPostAction(postId: number, formData: FormData) {
   });
   // A person wrote or checked this caption, so it is no longer demo text.
   await setDemoPart(workspace.id, postId, "text", false);
+  await recordPostVersion(workspace.id, postId, "caption", user.id);
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
 

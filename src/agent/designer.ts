@@ -2,7 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import type { Brand, Post } from "@/db/schema";
 import { getFile, newKey, putFile } from "@/lib/storage";
-import { isDemoProvider, setDemoPart } from "@/lib/data";
+import { isDemoProvider, recordPostVersion, setDemoPart } from "@/lib/data";
 import { generateImage } from "./images/router";
 import { composePoster, posterSize, POSTER_TEMPLATES, type PosterTemplate } from "./images/poster";
 
@@ -105,5 +105,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
     .set({ designStatus: "done", posterTemplate: template, updatedAt: new Date() })
     .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
   await setDemoPart(post.workspaceId, post.id, "image", demoImage);
+  // New poster = new version; an approved post goes back to review.
+  await recordPostVersion(post.workspaceId, post.id, "poster");
   return asset;
 }

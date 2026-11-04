@@ -167,10 +167,62 @@ export const posts = pgTable(
     // Which parts were made by the built-in demo generator (not real AI): "text" | "image" | "video".
     // A post with any demo part cannot be approved.
     demoParts: jsonb("demo_parts").$type<string[]>().default([]).notNull(),
+    // Approval lock: every caption or creative change saves a new version (post_versions).
+    // Approval is for one version only; any later change sends the post back to review.
+    currentVersion: integer("current_version").default(0).notNull(),
+    approvedVersion: integer("approved_version"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("posts_ws_status").on(t.workspaceId, t.status), index("posts_campaign").on(t.campaignId)],
+);
+
+// A frozen copy of a post's caption and creative. Publishing (later) uses the approved version.
+export const postVersions = pgTable(
+  "post_versions",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: integer("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    // caption | ai_write | ai_rewrite | poster | reel | backfill
+    reason: varchar("reason", { length: 20 }).notNull(),
+    caption: text("caption"),
+    hashtags: jsonb("hashtags").$type<string[]>().default([]).notNull(),
+    imagePrompt: text("image_prompt"),
+    posterHeadline: varchar("poster_headline", { length: 120 }),
+    posterCta: varchar("poster_cta", { length: 60 }),
+    posterAssetId: integer("poster_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    videoAssetId: integer("video_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    demoParts: jsonb("demo_parts").$type<string[]>().default([]).notNull(),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }), // null = the agent
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("post_versions_post_version").on(t.postId, t.version), index("post_versions_ws").on(t.workspaceId)],
+);
+
+// Approval log: who approved or rejected which version, and when.
+export const approvals = pgTable(
+  "approvals",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: integer("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    decision: varchar("decision", { length: 10 }).notNull(), // approved | rejected
+    note: text("note"),
+    userId: integer("user_id").references(() => users.id, { onDelete: "set null" }), // null = backfill
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("approvals_post").on(t.postId), index("approvals_ws").on(t.workspaceId)],
 );
 
 // Audit trail of every AI call: which model, how long, what it cost.
@@ -280,3 +332,5 @@ export type Post = typeof posts.$inferSelect;
 export type Generation = typeof generations.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
+export type PostVersion = typeof postVersions.$inferSelect;
+export type Approval = typeof approvals.$inferSelect;

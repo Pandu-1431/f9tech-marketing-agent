@@ -51,6 +51,12 @@ async function latestAsset(workspaceId: number, postId: number, kind: string) {
   return a;
 }
 
+
+/** The reviewer saw the post as it is now. */
+async function seen(workspaceId: number, postId: number) {
+  return { userId: null, version: (await getPost(workspaceId, postId))?.currentVersion ?? 0 };
+}
+
 describe("demo content labels", () => {
   beforeEach(async () => {
     await freshDb();
@@ -72,10 +78,10 @@ describe("demo content labels", () => {
       expect((await latestAsset(ws.id, p.id, "background")).demo).toBe(true);
     }
     const target = posts[0];
-    await expect(reviewPost(ws.id, target.id, "approved", null)).rejects.toBeInstanceOf(DemoContentError);
+    await expect(reviewPost(ws.id, target.id, "approved", null, await seen(ws.id, target.id))).rejects.toBeInstanceOf(DemoContentError);
     expect((await getPost(ws.id, target.id))?.status).toBe("drafted");
     // Rejecting demo content is still allowed.
-    await reviewPost(ws.id, target.id, "rejected", "demo");
+    await reviewPost(ws.id, target.id, "rejected", "demo", await seen(ws.id, target.id));
     expect((await getPost(ws.id, target.id))?.status).toBe("rejected");
   });
 
@@ -86,7 +92,7 @@ describe("demo content labels", () => {
       expect(p.demoParts).toEqual([]);
       expect((await latestAsset(ws.id, p.id, "poster")).demo).toBe(false);
     }
-    await reviewPost(ws.id, posts[0].id, "approved", null);
+    await reviewPost(ws.id, posts[0].id, "approved", null, await seen(ws.id, posts[0].id));
     expect((await getPost(ws.id, posts[0].id))?.status).toBe("approved");
   });
 
@@ -100,7 +106,7 @@ describe("demo content labels", () => {
     expect((await getPost(ws.id, id))?.demoParts.sort()).toEqual(["image", "text"]);
     await setDemoPart(ws.id, id, "text", false); // e.g. a person edited the caption
     expect((await getPost(ws.id, id))?.demoParts).toEqual(["image"]);
-    await expect(reviewPost(ws.id, id, "approved", null)).rejects.toBeInstanceOf(DemoContentError);
+    await expect(reviewPost(ws.id, id, "approved", null, await seen(ws.id, id))).rejects.toBeInstanceOf(DemoContentError);
   });
 
   it("a demo marker in one workspace cannot be set from another", async () => {
@@ -111,7 +117,7 @@ describe("demo content labels", () => {
     const db = await getDb();
     const [row] = await db.select().from(schema.posts).where(eq(schema.posts.id, posts[0].id));
     expect(row.demoParts).toEqual([]);
-    expect(await reviewPost(other.id, posts[0].id, "approved", null)).toBeNull();
+    expect(await reviewPost(other.id, posts[0].id, "approved", null, await seen(other.id, posts[0].id))).toBeNull();
   });
 
   it("a reel made from demo images is labelled", async () => {
