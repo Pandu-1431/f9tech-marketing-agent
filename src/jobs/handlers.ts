@@ -242,8 +242,15 @@ const autopilotJob: Handler = async (payload) => {
   }
 };
 
+/** Publisher: send one approved post version to its channel. */
+const publishJob: Handler = async (payload) => {
+  const { sendPublication } = await import("@/agent/publish");
+  await sendPublication(Number(payload.workspaceId), Number(payload.publicationId));
+};
+
 export const handlers = {
   "autopilot.run": autopilotJob,
+  "post.publish": publishJob,
   "campaign.plan": planCampaignJob,
   "campaign.write": writeCampaignJob,
   "post.rewrite": rewritePostJob,

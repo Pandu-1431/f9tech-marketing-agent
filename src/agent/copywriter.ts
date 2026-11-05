@@ -40,6 +40,7 @@ const styleRules: Record<string, string> = {
   youtube: "First line = the video title, then the description with keywords early.",
   x: "Punchy, one idea.",
   google_business: "Google Business Profile update: local keywords and the city name, clear call to action.",
+  telegram: "Telegram channel post: useful first line, short paragraphs, one clear link, few emojis.",
 };
 
 /** Style + length + hashtag rules for one platform, from the shared creative standards. */

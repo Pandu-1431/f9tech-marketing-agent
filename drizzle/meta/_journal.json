@@ -85,6 +85,13 @@
       "when": 1793878476992,
       "tag": "0011_weekly_autopilot",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793880401179,
+      "tag": "0012_publishing",
+      "breakpoints": true
     }
   ]
 }

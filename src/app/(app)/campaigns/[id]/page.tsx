@@ -12,6 +12,9 @@ import {
   approveAllPassedAction,
 } from "@/app/actions/campaigns";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { campaignPublications, listChannels } from "@/agent/publish";
+import { publishNowAction } from "@/app/actions/publishing";
+import type { Publication } from "@/db/schema";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import { StatusBadge } from "@/components/status-badge";
 import { requireAuth } from "@/lib/auth";
@@ -39,6 +42,8 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     latestVideos(workspace.id, campaign.id),
     campaignHistory(workspace.id, campaign.id),
   ]);
+  const [channels, publications] = await Promise.all([listChannels(workspace.id, campaign.brandId), campaignPublications(workspace.id, campaign.id)]);
+  const channelPlatforms = new Set(channels.map((c) => c.platform));
   const makingVideos = posts.filter((p) => p.reelStatus === "making").length;
   const problem = await campaignJobProblem(workspace.id, campaign.id);
   const designing = posts.filter((p) => p.status !== "idea" && (p.designStatus === "designing" || (campaign.status === "ready" && p.designStatus === "none")));
@@ -153,6 +158,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                 </details>
               )}
               {isApprovedForPublish(post) && <span className="badge bg-emerald-600 text-white">Ready to publish</span>}
+              <PublishLine pub={publications.get(post.id)} post={post} hasChannel={channelPlatforms.has(post.platform)} canEdit={canEdit} />
               <span className="badge bg-zinc-100 text-zinc-700">{PLATFORM_LABELS[post.platform] ?? post.platform}</span>
               <span className="badge bg-zinc-100 text-zinc-700">{post.format}</span>
               <StatusBadge status={post.status} />
@@ -379,6 +385,7 @@ type HistoryEntry = { key: string; at: Date; version: number; kind: "version" | 
 
 /** Why the Approve button is off, or null when the post can be approved. */
 function approveBlocker(post: Post): string | null {
+  if (post.status === "published") return "Already published";
   if (post.demoParts.length > 0) return "Demo content cannot be approved";
   if (post.designStatus === "designing" || post.reelStatus === "making") return "Wait until the poster and video are ready";
   if (post.currentVersion < 1) return "Nothing to approve yet";
@@ -492,5 +499,35 @@ function QualityPanel({ post, canEdit }: { post: Post; canEdit: boolean }) {
         </form>
       )}
     </div>
+  );
+}
+
+/** Publishing status of a post, and "Publish now" when it is approved and a channel is connected. */
+function PublishLine({ pub, post, hasChannel, canEdit }: { pub?: Publication; post: Post; hasChannel: boolean; canEdit: boolean }) {
+  const current = pub && pub.version === post.approvedVersion ? pub : undefined;
+  if (current?.status === "sent") {
+    return (
+      <span data-testid="published" className="badge bg-emerald-100 text-emerald-800">
+        Published v{current.version}
+        {current.url && (
+          <a href={current.url} target="_blank" rel="noreferrer" className="ml-1 underline">
+            view
+          </a>
+        )}
+      </span>
+    );
+  }
+  if (current && (current.status === "queued" || current.status === "sending")) return <span className="badge bg-sky-100 text-sky-800">Publishing…</span>;
+  if (!isApprovedForPublish(post)) return null;
+  if (!hasChannel) return <span className="text-xs text-zinc-500">Connect a {PLATFORM_LABELS[post.platform] ?? post.platform} channel in the Brand Kit to publish</span>;
+  return (
+    <>
+      {current?.status === "failed" && <span className="text-xs text-red-700" title={current.error ?? ""}>Publish failed: {(current.error ?? "").slice(0, 90)}</span>}
+      {canEdit && (
+        <form action={publishNowAction.bind(null, post.id)}>
+          <button className="badge border border-emerald-600 bg-white text-emerald-700">{current?.status === "failed" ? "Try again" : "Publish now"}</button>
+        </form>
+      )}
+    </>
   );
 }

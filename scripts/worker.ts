@@ -7,6 +7,7 @@
 import "dotenv/config";
 import { processJobs } from "../src/jobs/queue";
 import { queueDueAutopilots } from "../src/agent/autopilot";
+import { queueDuePublications } from "../src/agent/publish";
 
 const IDLE_MS = Number(process.env.WORKER_IDLE_MS ?? 3000);
 let stopping = false;
@@ -24,6 +25,7 @@ async function main() {
   while (!stopping) {
     try {
       await queueDueAutopilots();
+      await queueDuePublications();
       const ran = await processJobs(20);
       if (ran > 0) console.log(`[worker] ran ${ran} job(s)`);
       else await new Promise((r) => setTimeout(r, IDLE_MS));

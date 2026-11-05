@@ -8,7 +8,7 @@ import { DEFAULT_TIMEZONE, isHhMm, isValidTimeZone, slotFor, zonedToUtc } from "
 import { parseJsonObject } from "./json";
 import { generateText } from "./router";
 
-export const PLATFORMS = ["instagram", "facebook", "linkedin", "youtube", "x", "google_business"] as const;
+export const PLATFORMS = ["instagram", "facebook", "linkedin", "youtube", "x", "google_business", "telegram"] as const;
 export const FORMATS = ["image", "carousel", "reel", "story", "text"] as const;
 
 const planSchema = z.object({

@@ -28,6 +28,8 @@ export function creativeSpec(platform: string, format: string): CreativeSpec {
       return { width: 1600, height: 900, ratio: "16:9", safe: NONE, label: "Post image 1600×900 (16:9)" };
     case "youtube":
       return { width: 1280, height: 720, ratio: "16:9", safe: { top: 0, right: 200, bottom: 90, left: 0 }, label: "Thumbnail 1280×720 (16:9)" };
+    case "telegram":
+      return { width: 1080, height: 1350, ratio: "4:5", safe: NONE, label: "Channel post 1080×1350 (4:5)" };
     case "google_business":
       return { width: 1200, height: 900, ratio: "4:3", safe: NONE, label: "Update photo 1200×900 (4:3)" };
     default:
@@ -53,6 +55,7 @@ export const HASHTAG_RULES: Record<string, { min: number; max: number; note: str
   x: { min: 1, max: 2, note: "1-2; more looks like spam." },
   youtube: { min: 3, max: 5, note: "3-5; the first 3 show above the title. Add #Shorts for Shorts." },
   google_business: { min: 0, max: 0, note: "No hashtags on Google Business Profile." },
+  telegram: { min: 0, max: 3, note: "0-3; Telegram channels use few hashtags." },
 };
 
 /** Caption length targets (characters) and the platform's hard limit. */
@@ -63,6 +66,8 @@ export const CAPTION_RULES: Record<string, { target: string; limit: number }> = 
   x: { target: "under 260 characters", limit: 280 },
   youtube: { target: "title under 70 characters, then 100-150 words", limit: 5000 },
   google_business: { target: "80-150 words", limit: 1500 },
+  // A photo caption on Telegram holds 1024 characters.
+  telegram: { target: "40-120 words, useful first, one link", limit: 1024 },
 };
 
 /** Keeps the hashtags inside the platform's limit; campaign/brand tags come first so they survive. */

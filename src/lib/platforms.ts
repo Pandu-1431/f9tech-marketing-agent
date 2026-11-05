@@ -5,4 +5,5 @@ export const PLATFORM_LABELS: Record<string, string> = {
   youtube: "YouTube",
   x: "X (Twitter)",
   google_business: "Google Business Profile",
+  telegram: "Telegram",
 };

@@ -392,3 +392,55 @@ export type Asset = typeof assets.$inferSelect;
 export type PostVersion = typeof postVersions.$inferSelect;
 export type Approval = typeof approvals.$inferSelect;
 export type Invite = typeof invites.$inferSelect;
+
+// A place the agent publishes to: a Telegram channel, a Facebook Page, an Instagram account.
+// The token is encrypted (src/lib/secrets.ts) and never sent to the browser.
+export const channels = pgTable(
+  "channels",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => brands.id, { onDelete: "cascade" }),
+    platform: varchar("platform", { length: 30 }).notNull(), // telegram | facebook | instagram
+    name: varchar("name", { length: 200 }).notNull(), // "@chakravyuh_upsc", page name...
+    // telegram: { chatId } · facebook: { pageId } · instagram: { igUserId }
+    config: jsonb("config").$type<Record<string, string>>().default({}).notNull(),
+    secret: text("secret").notNull(),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("channels_ws").on(t.workspaceId), uniqueIndex("channels_brand_platform").on(t.brandId, t.platform)],
+);
+
+// One approved version of a post sent (or being sent) to one channel. Never sent twice.
+export const publications = pgTable(
+  "publications",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: integer("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    channelId: integer("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    platform: varchar("platform", { length: 30 }).notNull(),
+    version: integer("version").notNull(),
+    // queued | sending | sent | failed
+    status: varchar("status", { length: 12 }).default("queued").notNull(),
+    externalId: varchar("external_id", { length: 200 }),
+    url: text("url"),
+    error: text("error"),
+    attempts: integer("attempts").default(0).notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("publications_ws").on(t.workspaceId), uniqueIndex("publications_post_channel_version").on(t.postId, t.channelId, t.version)],
+);
+
+export type Channel = typeof channels.$inferSelect;
+export type Publication = typeof publications.$inferSelect;

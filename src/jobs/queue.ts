@@ -136,6 +136,8 @@ export function startInlineWorker(everyMs = 3000) {
         lastAutopilotCheck = Date.now();
         const { queueDueAutopilots } = await import("@/agent/autopilot");
         await queueDueAutopilots();
+        const { queueDuePublications } = await import("@/agent/publish");
+        await queueDuePublications();
       }
       await processJobs(20);
     } catch (err) {

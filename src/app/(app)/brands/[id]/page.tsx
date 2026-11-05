@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { deleteBrandAction, updateBrandAction } from "@/app/actions/brands";
 import { BrandForm } from "@/components/brand-form";
 import { AutopilotForm } from "@/components/autopilot-form";
+import { ChannelsSection } from "@/components/channels-section";
+import { listChannels } from "@/agent/publish";
 import { timeZoneOptions } from "@/lib/schedule";
 import { requireEditor } from "@/lib/auth";
 import { getBrand, listProductShots } from "@/lib/data";
@@ -23,6 +25,7 @@ export default async function EditBrandPage({ params }: { params: Promise<{ id: 
         </form>
       </div>
       <AutopilotForm brand={brand} />
+      <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} />
       <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" timeZones={timeZoneOptions()} shots={shots} />
     </div>
   );
