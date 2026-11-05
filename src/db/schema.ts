@@ -112,6 +112,10 @@ export const brands = pgTable(
     timezone: varchar("timezone", { length: 60 }).default("Asia/Kolkata").notNull(),
     logoUrl: text("logo_url"),
     logoKey: text("logo_key"),
+    // Brand Kit v2. Photo look for every AI image (people, places, mood, banned looks).
+    visualStyle: text("visual_style"),
+    // Approved facts about the business (numbers, features, dates). The only facts AI may state.
+    keyFacts: text("key_facts"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -185,6 +189,9 @@ export const posts = pgTable(
     reviewNote: text("review_note"),
     posterHeadline: varchar("poster_headline", { length: 120 }),
     posterCta: varchar("poster_cta", { length: 60 }),
+    // Poster sub-line (one short sentence) and kicker (small label above the headline, e.g. "TIP").
+    posterSubline: varchar("poster_subline", { length: 160 }),
+    posterKicker: varchar("poster_kicker", { length: 40 }),
     posterTemplate: varchar("poster_template", { length: 30 }).default("band").notNull(),
     // none | designing | done | failed
     designStatus: varchar("design_status", { length: 12 }).default("none").notNull(),
@@ -228,6 +235,8 @@ export const postVersions = pgTable(
     imagePrompt: text("image_prompt"),
     posterHeadline: varchar("poster_headline", { length: 120 }),
     posterCta: varchar("poster_cta", { length: 60 }),
+    posterSubline: varchar("poster_subline", { length: 160 }),
+    posterKicker: varchar("poster_kicker", { length: 40 }),
     posterAssetId: integer("poster_asset_id").references(() => assets.id, { onDelete: "set null" }),
     videoAssetId: integer("video_asset_id").references(() => assets.id, { onDelete: "set null" }),
     demoParts: jsonb("demo_parts").$type<string[]>().default([]).notNull(),

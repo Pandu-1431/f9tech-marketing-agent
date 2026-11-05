@@ -57,6 +57,9 @@ export class FakeProvider implements TextProvider {
             seo_keywords: ["festive offer", "best deals near me"],
             poster_headline: ["Diwali Gift Boxes 20% Off", "Fresh Sweets, Made Today", "Last 3 Days of the Offer", "Gift Sweetness This Diwali"][(n - 1) % 4],
             poster_cta: ["Order Now", "Visit Today", "Pre-order on WhatsApp"][(n - 1) % 3],
+            poster_subline: ["Made fresh every morning.", "Gift boxes for every budget.", "Pre-order today, pick up tomorrow.", ""][(n - 1) % 4],
+            poster_kicker: ["Diwali", "Tip", "", "New"][(n - 1) % 4],
+            poster_template: ["band", "tip", "bignumber", "split"][(n - 1) % 4],
           };
         }),
       });
@@ -78,6 +81,9 @@ export class FakeProvider implements TextProvider {
         seo_keywords: ["festive offer", "best deals near me"],
         poster_headline: ["Diwali Gift Boxes 20% Off", "Fresh Sweets, Made Today", "Last 3 Days of the Offer", "Gift Sweetness This Diwali"][(n - 1) % 4],
         poster_cta: ["Order Now", "Visit Today", "Pre-order on WhatsApp"][(n - 1) % 3],
+        poster_subline: ["Made fresh every morning.", "Gift boxes for every budget.", "Pre-order today, pick up tomorrow.", ""][(n - 1) % 4],
+        poster_kicker: ["Diwali", "Tip", "", "New"][(n - 1) % 4],
+        poster_template: ["band", "tip", "bignumber", "split"][(n - 1) % 4],
       });
     } else if (p.includes("TASK: REEL_SCRIPT")) {
       const theme = /CAMPAIGN THEME: ([^\n]+)/.exec(p)?.[1] ?? "our offer";

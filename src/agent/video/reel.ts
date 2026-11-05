@@ -9,6 +9,7 @@ import { assertCanGenerate } from "@/lib/plan";
 import { getFile, newKey, putFile } from "@/lib/storage";
 import { generateImage } from "../images/router";
 import { QuotaExceededError } from "../router";
+import { imagePrompt, siteLabel } from "../style";
 import { renderSceneFrame, REEL_H, REEL_W } from "./frames";
 import { ffmpeg, tempDir, wavDurationSec } from "./ffmpeg";
 import { writeReelScriptWithProvider } from "./script";
@@ -88,7 +89,7 @@ export async function buildReelVideo(input: {
       const img = await generateImage(
         { workspaceId, brandId: brand.id, purpose: "reel_scene", subject: { type: "post", id: postId } },
         {
-          prompt: `${scene.imagePrompt || scene.onScreen}. ${brand.colors.length ? `colour palette ${brand.colors.join(", ")}. ` : ""}vertical photo, no text, no letters, no watermark`,
+          prompt: `${imagePrompt(brand, scene.imagePrompt || scene.onScreen, "band")}. Vertical 9:16 photo`,
           width: REEL_W,
           height: REEL_H,
           colors: brand.colors,
@@ -125,7 +126,7 @@ export async function buildReelVideo(input: {
         background: img.data,
         onScreen: scene.onScreen,
         subtitle: scene.voiceover,
-        brandName: [brand.name, brand.city].filter(Boolean).join(" · "),
+        brandName: [brand.name, siteLabel(brand.website) ?? brand.city].filter(Boolean).join(" · "),
         colors: brand.colors,
         logo,
         cta: last ? script.cta : null,

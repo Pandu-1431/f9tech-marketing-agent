@@ -64,6 +64,13 @@
       "when": 1793797363135,
       "tag": "0008_scheduling",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793854423898,
+      "tag": "0009_brand_kit_v2",
+      "breakpoints": true
     }
   ]
 }

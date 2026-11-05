@@ -1,4 +1,5 @@
 import type { Brand } from "@/db/schema";
+import { brandFactsBlock, simpleLanguageRules } from "./style";
 
 const list = (items: string[] | null | undefined) => (items && items.length ? items.join(", ") : "not set");
 
@@ -34,9 +35,13 @@ export function brandSystemPrompt(brand: Brand): string {
     `Language: ${brand.language}`,
     `Brand colours: ${list(brand.colors)}`,
     `Fonts: ${list(brand.fonts)}`,
+    `Visual style: ${brand.visualStyle ?? "real Indian people and places, natural light"}`,
     `SEO keywords to use naturally: ${list(brand.keywords)}`,
     `Brand hashtags (always include where fitting): ${list(brand.hashtags)}`,
     `Do: ${brand.dos ?? "not set"}`,
     `Don't: ${brand.donts ?? "not set"}`,
+    ...brandFactsBlock(brand),
+    "",
+    ...simpleLanguageRules(brand),
   ].join("\n");
 }

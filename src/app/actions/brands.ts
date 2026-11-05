@@ -61,6 +61,8 @@ const brandSchema = z.object({
   dos: text(1000),
   donts: text(1000),
   services: text(3000),
+  visualStyle: text(1000),
+  keyFacts: text(3000),
   timezone: z
     .string()
     .trim()
@@ -68,6 +70,15 @@ const brandSchema = z.object({
     .refine((v) => isValidTimeZone(v), "Pick a valid time zone")
     .default(DEFAULT_TIMEZONE),
 });
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** Main + accent colour pickers (plus any extra colours kept from before, or the old CSV field). */
+function readColors(formData: FormData): string[] {
+  const picked = [formData.get("colorPrimary"), formData.get("colorAccent")].map((v) => String(v ?? "").trim());
+  const extra = [...csv(formData.get("colorsExtra")), ...csv(formData.get("colors"))];
+  return Array.from(new Set([...picked, ...extra].filter((c) => HEX.test(c)).map((c) => c.toLowerCase()))).slice(0, 6);
+}
 
 function readBrand(formData: FormData) {
   const parsed = brandSchema.safeParse({
@@ -82,13 +93,15 @@ function readBrand(formData: FormData) {
     dos: formData.get("dos") ?? "",
     donts: formData.get("donts") ?? "",
     services: formData.get("services") ?? "",
+    visualStyle: formData.get("visualStyle") ?? "",
+    keyFacts: formData.get("keyFacts") ?? "",
     timezone: formData.get("timezone") || DEFAULT_TIMEZONE,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form" } as const;
   return {
     data: {
       ...parsed.data,
-      colors: csv(formData.get("colors")),
+      colors: readColors(formData),
       fonts: [String(formData.get("fontHeading") || DEFAULT_HEADING_FONT), String(formData.get("fontBody") || DEFAULT_BODY_FONT)].filter((f) => KNOWN_FONTS.has(f)),
       keywords: csv(formData.get("keywords")),
       hashtags: csv(formData.get("hashtags")).map((h) => (h.startsWith("#") ? h : `#${h}`)),

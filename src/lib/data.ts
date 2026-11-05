@@ -152,7 +152,7 @@ export async function getPost(workspaceId: number, id: number) {
 export async function updatePost(
   workspaceId: number,
   id: number,
-  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterTemplate" | "designStatus" | "reelStatus" | "reelError">>,
+  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterSubline" | "posterKicker" | "posterTemplate" | "designStatus" | "reelStatus" | "reelError">>,
 ) {
   const db = await getDb();
   const [row] = await db
@@ -248,6 +248,8 @@ export async function recordPostVersion(workspaceId: number, postId: number, rea
         imagePrompt: post.imagePrompt,
         posterHeadline: post.posterHeadline,
         posterCta: post.posterCta,
+        posterSubline: post.posterSubline,
+        posterKicker: post.posterKicker,
         posterAssetId: await latest("poster"),
         videoAssetId: await latest("video"),
         demoParts: post.demoParts,

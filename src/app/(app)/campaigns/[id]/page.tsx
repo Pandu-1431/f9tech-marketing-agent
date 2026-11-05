@@ -23,7 +23,8 @@ import type { Campaign, Post } from "@/db/schema";
 import { allowedFormats } from "@/agent/planner";
 import { campaignTypeLabel, FORMAT_LABELS } from "@/lib/campaign-types";
 
-const TEMPLATE_LABELS: Record<string, string> = { band: "Bottom band", top: "Top headline", center: "Centre card" };
+import { TEMPLATE_INFO } from "@/agent/images/poster-info";
+const TEMPLATE_LABELS: Record<string, string> = Object.fromEntries(Object.entries(TEMPLATE_INFO).map(([id, t]) => [id, t.label]));
 
 export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
   const { workspace, role } = await requireAuth();
@@ -177,7 +178,9 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                   {canEdit && (
                     <>
                       <form action={editPosterTextAction.bind(null, post.id)} className="space-y-1.5">
+                        <input className="input" name="posterKicker" defaultValue={post.posterKicker ?? ""} placeholder="Small label (e.g. TIP)" />
                         <input className="input" name="posterHeadline" defaultValue={post.posterHeadline ?? ""} placeholder="Poster headline" />
+                        <input className="input" name="posterSubline" defaultValue={post.posterSubline ?? ""} placeholder="Sub-line (one short sentence)" />
                         <div className="flex gap-1.5">
                           <input className="input" name="posterCta" defaultValue={post.posterCta ?? ""} placeholder="Button text" />
                           <button className="btn-secondary shrink-0">Update</button>

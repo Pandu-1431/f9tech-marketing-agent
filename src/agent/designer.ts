@@ -6,16 +6,11 @@ import { isDemoProvider, recordPostVersion, setDemoPart } from "@/lib/data";
 import { brandFonts } from "@/lib/fonts";
 import { creativeSpec } from "@/lib/formats";
 import { generateImage } from "./images/router";
-import { composePoster, posterSize, POSTER_TEMPLATES, type PosterTemplate } from "./images/poster";
+import { composePoster, isPosterTemplate, posterSize, type PosterTemplate } from "./images/poster";
+import { imagePrompt, siteLabel } from "./style";
 
-function backgroundPrompt(brand: Brand, post: Post): string {
-  return [
-    post.imagePrompt || post.angle || brand.description || brand.name,
-    brand.colors.length ? `colour palette ${brand.colors.join(", ")}` : "",
-    "professional marketing photo, high quality, clean composition, empty space for text, no text, no letters, no watermark",
-  ]
-    .filter(Boolean)
-    .join(". ");
+function backgroundPrompt(brand: Brand, post: Post, template: PosterTemplate): string {
+  return imagePrompt(brand, post.imagePrompt || post.angle || "", template);
 }
 
 /**
@@ -25,7 +20,7 @@ function backgroundPrompt(brand: Brand, post: Post): string {
 export async function designPost(post: Post, brand: Brand, opts: { newBackground?: boolean; template?: PosterTemplate } = {}) {
   const db = await getDb();
   const { width, height } = posterSize(post.platform, post.format);
-  const template = opts.template ?? ((POSTER_TEMPLATES as readonly string[]).includes(post.posterTemplate) ? (post.posterTemplate as PosterTemplate) : "band");
+  const template: PosterTemplate = opts.template ?? (isPosterTemplate(post.posterTemplate) ? post.posterTemplate : "band");
 
   // Reuse the existing background when only the template or text changes.
   let background: Buffer | null = null;
@@ -47,7 +42,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
   if (!background) {
     const img = await generateImage(
       { workspaceId: post.workspaceId, brandId: brand.id, purpose: "post_background", subject: { type: "post", id: post.id } },
-      { prompt: backgroundPrompt(brand, post), width, height, colors: brand.colors, seed: post.id },
+      { prompt: backgroundPrompt(brand, post, template), width, height, colors: brand.colors, seed: post.id },
     );
     background = img.data;
     backgroundProvider = img.provider;
@@ -63,7 +58,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
       width,
       height,
       bytes: img.data.length,
-      prompt: backgroundPrompt(brand, post),
+      prompt: backgroundPrompt(brand, post, template),
       provider: img.provider,
       demo: isDemoProvider(img.provider),
     });
@@ -76,12 +71,14 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
     height,
     template,
     headline: post.posterHeadline || brand.name,
+    subline: post.posterSubline,
+    kicker: post.posterKicker,
     cta: post.posterCta,
     brandName: brand.name,
     colors: brand.colors,
-    logo,
-    footer: [brand.name, brand.city].filter(Boolean).join(" · "),
     fonts: brandFonts(brand.fonts),
+    logo,
+    footer: [brand.name, siteLabel(brand.website) ?? brand.city].filter(Boolean).join(" · "),
     safe: creativeSpec(post.platform, post.format).safe,
   });
 
@@ -114,3 +111,4 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
   await recordPostVersion(post.workspaceId, post.id, "poster");
   return asset;
 }
+

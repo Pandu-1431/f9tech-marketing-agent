@@ -17,6 +17,7 @@ type Props = {
 export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["Asia/Kolkata"] }: Props) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
   const join = (v?: string[] | null) => (v ?? []).join(", ");
+  const hex = (v: string | undefined, fallback: string) => (v && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback);
 
   return (
     <form action={formAction} className="space-y-6">
@@ -92,9 +93,19 @@ export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["A
           <p className="hint">The planner spreads posts across these, so every service gets attention.</p>
         </div>
         <div>
-          <label className="label" htmlFor="colors">Brand colours</label>
-          <input className="input" id="colors" name="colors" defaultValue={join(brand?.colors)} placeholder="#E63946, #F1FAEE" />
-          <p className="hint">Comma separated hex codes.</p>
+          <span className="label">Brand colours</span>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="color" name="colorPrimary" defaultValue={hex(brand?.colors?.[0], "#3730a3")} className="h-9 w-12 cursor-pointer rounded border border-zinc-200" />
+              Main
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="color" name="colorAccent" defaultValue={hex(brand?.colors?.[1], "#f59e0b")} className="h-9 w-12 cursor-pointer rounded border border-zinc-200" />
+              Accent
+            </label>
+          </div>
+          <input type="hidden" name="colorsExtra" defaultValue={join(brand?.colors?.slice(2))} />
+          <p className="hint">Main = bands and backgrounds (use your logo colour). Accent = buttons and highlights.</p>
         </div>
         <div>
           <label className="label" htmlFor="fontHeading">Heading font</label>
@@ -112,6 +123,30 @@ export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["A
             ))}
           </select>
           <p className="hint">Used on every poster and video. Telugu and Hindi text switch to a matching font automatically.</p>
+        </div>
+        <div className="md:col-span-2">
+          <label className="label" htmlFor="visualStyle">Photo style</label>
+          <textarea
+            className="input"
+            id="visualStyle"
+            name="visualStyle"
+            rows={2}
+            defaultValue={brand?.visualStyle ?? ""}
+            placeholder="Real Indian students aged 20-30 studying at home, in libraries and hostels; calm, hopeful mood; warm daylight. No stock-photo look."
+          />
+          <p className="hint">Who and what should appear in your photos. Every AI image follows this.</p>
+        </div>
+        <div className="md:col-span-2">
+          <label className="label" htmlFor="keyFacts">Key facts</label>
+          <textarea
+            className="input"
+            id="keyFacts"
+            name="keyFacts"
+            rows={4}
+            defaultValue={brand?.keyFacts ?? ""}
+            placeholder={"One per line, e.g.\n2,476 real UPSC past questions\nFree, no ads\nWorks offline"}
+          />
+          <p className="hint">True numbers and features. The AI only states facts from here and the campaign brief.</p>
         </div>
         <div>
           <label className="label" htmlFor="keywords">SEO keywords</label>

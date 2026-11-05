@@ -3,6 +3,7 @@ import type { Brand, Campaign, Post, ReelScript } from "@/db/schema";
 import { brandSystemPrompt } from "../brand-context";
 import { parseJsonObject } from "../json";
 import { generateText } from "../router";
+import { campaignBriefLines } from "../planner";
 
 const schema = z.object({
   title: z.string().default(""),
@@ -27,13 +28,16 @@ export function reelPrompt(campaign: Campaign, post: Post): string {
     `PLATFORM: ${post.platform}`,
     `POST ANGLE: ${post.angle ?? ""}`,
     `POST CAPTION: ${post.caption ?? ""}`,
+    ...campaignBriefLines(campaign),
     "",
     "Write a vertical short-video script (Instagram Reel / YouTube Short / Facebook Reel) of 20-35 seconds.",
     "- 4 to 6 scenes. Scene 1 is a hook that stops the scroll in the first 2 seconds.",
     "- The last scene is the call to action.",
-    "- voiceover: what the narrator says, max 18 words per scene, simple spoken English.",
-    "- on_screen: big text shown on screen, max 6 words.",
-    "- image_prompt: one vertical photo for the scene (subject, setting, brand colours, mood). No text in the image.",
+    "- voiceover: what the narrator says, max 16 words per scene. Talk like a friendly Indian mentor speaking to one person: simple, warm, clear. Easy to follow by ear.",
+    "- Scene 1 hook: a question or surprising fact the viewer cares about (e.g. \"Only 199 days to Prelims. Is your plan ready?\").",
+    "- on_screen: big text shown on screen, max 6 words, the key point of the scene.",
+    "- image_prompt: one realistic vertical photo for the scene, set in India with Indian people and places where people appear (subject, setting, mood). No text in the image.",
+    "- Only use facts from the brand key facts and the campaign brief.",
     "- cta: 2-4 word button text for the last scene (e.g. \"Order on WhatsApp\").",
     'Reply with JSON only: {"title": "...", "scenes": [{"voiceover": "...", "on_screen": "...", "image_prompt": "..."}], "cta": "..."}',
   ].join("\n");

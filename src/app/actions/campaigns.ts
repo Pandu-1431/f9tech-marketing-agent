@@ -187,6 +187,8 @@ export async function editPosterTextAction(postId: number, formData: FormData) {
   await updatePost(workspace.id, postId, {
     posterHeadline: String(formData.get("posterHeadline") ?? "").trim().slice(0, 120) || null,
     posterCta: String(formData.get("posterCta") ?? "").trim().slice(0, 60) || null,
+    posterSubline: String(formData.get("posterSubline") ?? "").trim().slice(0, 160) || null,
+    posterKicker: String(formData.get("posterKicker") ?? "").trim().slice(0, 40) || null,
     designStatus: "designing",
   });
   await enqueue("post.design", { workspaceId: workspace.id, postId }, workspace.id);

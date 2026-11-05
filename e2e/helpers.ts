@@ -34,7 +34,12 @@ export async function logout(page: Page) {
 export async function createBrand(page: Page, opts: { name: string; colors?: string }) {
   await page.goto("/brands/new");
   await page.fill("#name", opts.name);
-  if (opts.colors) await page.fill("#colors", opts.colors);
+  if (opts.colors) {
+    // Brand Kit v2: main + accent colour pickers.
+    const [main, accent] = opts.colors.split(",").map((c) => c.trim().toLowerCase());
+    if (main) await page.fill('input[name="colorPrimary"]', main);
+    if (accent) await page.fill('input[name="colorAccent"]', accent);
+  }
   await page.getByRole("button", { name: "Save business account" }).click();
   await page.waitForURL("**/brands", { waitUntil: "commit" });
   await expect(page.getByText(opts.name).first()).toBeVisible();

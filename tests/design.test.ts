@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
-import { composePoster, posterSize, wrap, readableOn } from "@/agent/images/poster";
+import { composePoster, posterSize, wrap, readableOn, POSTER_TEMPLATES } from "@/agent/images/poster";
 import { FakeImageProvider } from "@/agent/images/providers";
 import { generateImage } from "@/agent/images/router";
 import { generateText, QuotaExceededError } from "@/agent/router";
@@ -22,13 +22,16 @@ describe("poster composer", () => {
   it("renders every template at the platform size", async () => {
     const { width, height } = posterSize("instagram", "image");
     const bg = (await new FakeImageProvider().generate({ prompt: "x", width, height, colors: ["#E63946", "#F4A261"] })).data;
-    for (const template of ["band", "top", "center"] as const) {
-      const png = await composePoster({
-        background: bg, width, height, template, headline: "Diwali Gift Boxes 20% Off & More <Today>",
-        cta: "Order Now", brandName: "Vizag Sweets", colors: ["#E63946", "#F4A261"], footer: "Vizag Sweets · Visakhapatnam",
-      });
-      const meta = await sharp(png).metadata();
-      expect([meta.width, meta.height, meta.format]).toEqual([1080, 1350, "png"]);
+    for (const size of [{ width, height }, { width: 1080, height: 1920, safe: { top: 250, right: 60, bottom: 340, left: 60 } }, { width: 1280, height: 720 }]) {
+      for (const template of POSTER_TEMPLATES) {
+        const png = await composePoster({
+          background: bg, ...size, template, headline: "Diwali Gift Boxes 20% Off & More <Today>",
+          subline: "Made fresh every morning in Vizag.", kicker: "Diwali", fonts: { heading: "Montserrat", body: "Inter" },
+          cta: "Order Now", brandName: "Vizag Sweets", colors: ["#E63946", "#F4A261"], footer: "Vizag Sweets · Visakhapatnam",
+        });
+        const meta = await sharp(png).metadata();
+        expect([meta.width, meta.height, meta.format]).toEqual([size.width, size.height, "png"]);
+      }
     }
     expect(posterSize("instagram", "reel")).toEqual({ width: 1080, height: 1920 });
   });

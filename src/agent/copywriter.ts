@@ -6,6 +6,7 @@ import { parseJsonObject } from "./json";
 import { generateText } from "./router";
 import { isDemoProvider } from "@/lib/data";
 import { CAPTION_RULES, capHashtags, HASHTAG_RULES } from "@/lib/formats";
+import { isPosterTemplate, TEMPLATE_INFO } from "./images/poster-info";
 
 const copySchema = z.object({
   caption: z.string().min(1),
@@ -14,7 +15,23 @@ const copySchema = z.object({
   seo_keywords: z.array(z.string()).default([]),
   poster_headline: z.string().default(""),
   poster_cta: z.string().default(""),
+  poster_subline: z.string().default(""),
+  poster_kicker: z.string().default(""),
+  poster_template: z.string().default(""),
 });
+
+/** Poster lines + template choice, shared by single and batch prompts. */
+export function posterRules(): string[] {
+  return [
+    "POSTER (the image people see first; it must be clear in 1 second on a phone):",
+    '- poster_headline: the main message, max 7 words, simple words (e.g. "199 days to Prelims 2027").',
+    '- poster_subline: one short supporting sentence, max 12 words (e.g. "A daily plan sized to your free time."). Can be empty.',
+    '- poster_kicker: tiny label above the headline, 1-3 words (e.g. "TIP", "PYQ 2023", "Day 12", "New"). Can be empty.',
+    '- poster_cta: button text, 2-4 words (e.g. "Open the free app").',
+    `- poster_template: pick the best layout: ${Object.entries(TEMPLATE_INFO).map(([id, t]) => `${id} = ${t.bestFor}`).join("; ")}. Vary templates across posts.`,
+    "- image_prompt: ONE realistic photo for the background, set in India with Indian people and places where people appear (subject, setting, mood). Never ask for text in the image.",
+  ];
+}
 
 const styleRules: Record<string, string> = {
   instagram: "Hook in the first line, short lines, 1-3 emojis, call to action.",
@@ -52,9 +69,8 @@ export function copyPrompt(campaign: Campaign, post: Post): string {
     `Platform rules: ${platformRule(post.platform)}`,
     "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text. seo_keywords = 4-8 phrases a person would search on Google, YouTube or the Play Store (mix short and long-tail, include the city or language when relevant).",
     ...ctaRules(campaign),
-    "Poster headline: the short offer/message printed on the image, max 7 words (e.g. \"Diwali Gift Boxes 20% Off\"). Poster CTA: 2-3 words (e.g. \"Order Now\").",
-    "Image prompt: describe one on-brand visual (subject, setting, brand colours, mood, composition) for an AI image model. No text in the image unless essential.",
-    'Reply with JSON only: {"caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_cta": "..."}',
+    ...posterRules(),
+    'Reply with JSON only: {"caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_subline": "...", "poster_kicker": "...", "poster_cta": "...", "poster_template": "band"}',
   ].join("\n");
 }
 
@@ -97,9 +113,8 @@ export function batchPrompt(campaign: Campaign, posts: Post[]): string {
     "",
     "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text. seo_keywords = 4-8 phrases a person would search on Google, YouTube or the Play Store (mix short and long-tail, include the city or language when relevant).",
     ...ctaRules(campaign),
-    'Poster headline: max 7 words printed on the image (e.g. "Diwali Gift Boxes 20% Off"). Poster CTA: 2-3 words (e.g. "Order Now").',
-    "Image prompt: one on-brand visual (subject, setting, brand colours, mood). No text in the image.",
-    'Reply with JSON only: {"posts": [{"id": 123, "caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_cta": "..."}]}',
+    ...posterRules(),
+    'Reply with JSON only: {"posts": [{"id": 123, "caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_subline": "...", "poster_kicker": "...", "poster_cta": "...", "poster_template": "tip"}]}',
   ].join("\n");
 }
 
@@ -116,6 +131,10 @@ function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: P
     seoKeywords: copy.seo_keywords.slice(0, 8),
     posterHeadline: (copy.poster_headline || campaign.theme).slice(0, 120),
     posterCta: cta ? cta.slice(0, 60) : null,
+    posterSubline: copy.poster_subline.trim().slice(0, 160) || null,
+    posterKicker: copy.poster_kicker.trim().slice(0, 40) || null,
+    // Text-only formats have no poster; otherwise trust the model's pick when it is a real template.
+    posterTemplate: isPosterTemplate(copy.poster_template.trim()) ? copy.poster_template.trim() : undefined,
     /** true when the built-in demo generator wrote it (not a real AI model). */
     demo,
   };

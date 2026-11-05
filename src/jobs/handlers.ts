@@ -126,7 +126,7 @@ const rewritePostJob: Handler = async (payload) => {
     await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null, designStatus: "designing" });
     await setDemoPart(workspaceId, post.id, "text", demo);
     await recordPostVersion(workspaceId, post.id, "ai_rewrite");
-    const fresh = { ...post, ...copy, status: "drafted" };
+    const fresh = { ...post, ...copy, posterTemplate: copy.posterTemplate ?? post.posterTemplate, status: "drafted" };
     await designPost(fresh, brand);
   } catch (err) {
     if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
