@@ -19,6 +19,9 @@ function s3Client() {
     s3 = new S3Client({
       region: process.env.S3_REGION ?? "auto",
       endpoint: process.env.S3_ENDPOINT, // R2: https://<account-id>.r2.cloudflarestorage.com
+      // Supabase (and R2) want https://host/bucket/key, not https://bucket.host/key:
+      // the bucket-in-hostname form fails with a TLS handshake error on Supabase.
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
       credentials: {
         accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
         secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
@@ -82,3 +85,6 @@ export function mimeFromKey(key: string): string {
   const ext = key.split(".").pop() ?? "";
   return Object.entries(EXT).find(([, e]) => e === ext)?.[0] ?? "application/octet-stream";
 }
+
+/** Tests only: the S3 client the app uses. */
+export const _s3ClientForTests = () => s3Client();

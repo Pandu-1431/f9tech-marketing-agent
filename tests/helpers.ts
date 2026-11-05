@@ -1,6 +1,8 @@
 import { getDb, resetDbForTests, schema } from "@/db";
+import { _resetProviderRest } from "@/agent/router";
 
 export async function freshDb() {
+  _resetProviderRest();
   await resetDbForTests();
   return getDb();
 }

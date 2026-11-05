@@ -100,6 +100,28 @@ export async function bumpProvider(provider: string): Promise<void> {
     });
 }
 
+/*
+ * A provider that just answered "busy" or "over the free limit" is rested for a few minutes,
+ * so the next requests go straight to the backup instead of waiting for it to fail again.
+ * If every provider is resting, they are still tried (best effort), resting ones last.
+ */
+const restingUntil = new Map<string, number>();
+const cooldownMs = () => Math.max(0, Number(process.env.AGENT_PROVIDER_COOLDOWN_SEC ?? 300)) * 1000;
+const isBusyError = (message: string) => /\b(429|503|500|502|504)\b|busy|high demand|quota|free limit|rate limit|timeout|timed out/i.test(message);
+
+/** The chain with rested providers moved to the end. */
+export function providerOrder(chain: string[], now = Date.now()): string[] {
+  const ready = chain.filter((n) => (restingUntil.get(n) ?? 0) <= now);
+  return [...ready, ...chain.filter((n) => !ready.includes(n))];
+}
+export function restProvider(name: string, now = Date.now()) {
+  restingUntil.set(name, now + cooldownMs());
+}
+/** Tests only. */
+export function _resetProviderRest() {
+  restingUntil.clear();
+}
+
 export async function generateText(ctx: GenerateContext, req: TextRequest): Promise<GenerateOutput> {
   await assertCanGenerate(ctx.workspaceId);
   const limit = freePlan().monthlyTextGenerations;
@@ -111,7 +133,7 @@ export async function generateText(ctx: GenerateContext, req: TextRequest): Prom
   const errors: string[] = [];
   const promptLog = `SYSTEM:\n${req.system}\n\nUSER:\n${req.prompt}`;
 
-  for (const name of textChain()) {
+  for (const name of providerOrder(textChain())) {
     const built = buildProvider(name);
     if (!built) {
       errors.push(`${name}: not configured`);
@@ -148,10 +170,12 @@ export async function generateText(ctx: GenerateContext, req: TextRequest): Prom
           durationMs: Date.now() - started,
         })
         .returning({ id: schema.generations.id });
+      restingUntil.delete(name);
       return { text: result.text, provider: name, model: built.provider.model, generationId: gen.id };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(message);
+      if (isBusyError(message)) restProvider(name);
       await db.insert(schema.generations).values({
         workspaceId: ctx.workspaceId,
         brandId: ctx.brandId ?? null,

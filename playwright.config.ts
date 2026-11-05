@@ -21,6 +21,8 @@ const appEnv: Record<string, string> = {
   SESSION_SECRET: "e2e-only-session-secret-not-for-production-0123456789",
   AGENT_INLINE_JOBS: "true",
   AGENT_TRIAL_DAYS: "0",
+  // Tests switch the stand-in AI between working and failing: never rest a provider here.
+  AGENT_PROVIDER_COOLDOWN_SEC: "0",
   // Text and images go to the local stand-in; if it "fails", the built-in demo generator answers.
   AGENT_TEXT_CHAIN: "gemini,fake",
   AGENT_IMAGE_CHAIN: "cloudflare,fake",
