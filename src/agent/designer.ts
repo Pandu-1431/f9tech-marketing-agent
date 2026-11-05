@@ -104,7 +104,7 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
 
   await db
     .update(schema.posts)
-    .set({ designStatus: "done", posterTemplate: template, updatedAt: new Date() })
+    .set({ designStatus: "done", posterTemplate: template, lastError: null, updatedAt: new Date() })
     .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
   await setDemoPart(post.workspaceId, post.id, "image", demoImage);
   // New poster = new version; an approved post goes back to review.

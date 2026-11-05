@@ -10,7 +10,7 @@ import { fixNotes } from "@/agent/quality";
 import { makeReel } from "@/agent/video/reel";
 import type { PosterTemplate } from "@/agent/images/poster";
 import { TrialEndedError } from "@/lib/plan";
-import { getBrand, getCampaign, recordPostVersion, setCampaignStatus, setDemoPart, updatePost } from "@/lib/data";
+import { friendlyError, getBrand, getCampaign, recordPostVersion, setCampaignStatus, setDemoPart, updatePost } from "@/lib/data";
 
 type Payload = Record<string, unknown>;
 type Handler = ((payload: Payload) => Promise<void>) & {
@@ -89,6 +89,7 @@ const writeCampaignJob: Handler = async (payload) => {
           return;
         }
         failures++;
+        await updatePost(workspaceId, post.id, { lastError: friendlyError(err instanceof Error ? err.message : String(err)) });
       }
     }
   });
@@ -107,7 +108,10 @@ const writeCampaignJob: Handler = async (payload) => {
 };
 writeCampaignJob.onFinalFailure = async (payload, error) => {
   const { workspaceId, campaignId } = ids(payload);
-  await setCampaignStatus(workspaceId, campaignId, "failed", { error });
+  await setCampaignStatus(workspaceId, campaignId, "failed", { error: friendlyError(error) });
+  // The posts that WERE written still get their posters; the rest show "Try again".
+  const { enqueue } = await import("./queue");
+  await enqueue("campaign.design", { workspaceId, campaignId }, workspaceId);
 };
 
 /** Re-write a single post (the "regenerate" button). */
@@ -127,7 +131,7 @@ const rewritePostJob: Handler = async (payload) => {
     // The reviewer's note and the quality checker's findings tell the copywriter what to change.
     const notes = [post.reviewNote ?? "", ...fixNotes(post.qcIssues ?? [])];
     const { demo, ...copy } = await writePostCopy(campaign, brand, post, { notes });
-    await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null, designStatus: "designing" });
+    await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null, designStatus: "designing", lastError: null });
     await setDemoPart(workspaceId, post.id, "text", demo);
     await recordPostVersion(workspaceId, post.id, "ai_rewrite");
     const fresh = { ...post, ...copy, posterTemplate: copy.posterTemplate ?? post.posterTemplate, status: "drafted" };
@@ -140,6 +144,20 @@ const rewritePostJob: Handler = async (payload) => {
 };
 
 /** Step 3: make a poster for every drafted post that has none yet. */
+/** Rewrite gave up: put the post back as it was (never stuck on "Writing…") and say why. */
+rewritePostJob.onFinalFailure = async (payload, error) => {
+  const workspaceId = Number(payload.workspaceId);
+  const postId = Number(payload.postId);
+  const db = await getDb();
+  const [post] = await db.select().from(schema.posts).where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId)));
+  if (!post) return;
+  await updatePost(workspaceId, postId, {
+    status: post.caption ? "drafted" : "idea",
+    designStatus: post.designStatus === "designing" ? (post.currentVersion > 0 ? "done" : "failed") : post.designStatus,
+    lastError: friendlyError(error),
+  });
+};
+
 const designCampaignJob: Handler = async (payload) => {
   const { workspaceId, campaignId } = ids(payload);
   const campaign = await getCampaign(workspaceId, campaignId);
@@ -207,6 +225,16 @@ reelPostJob.onFinalFailure = async (payload, error) => {
 };
 
 /** Redesign one post: new background and/or another template. */
+/** Campaign posters gave up: no post stays on "Designing…". */
+designCampaignJob.onFinalFailure = async (payload, error) => {
+  const { workspaceId, campaignId } = ids(payload);
+  const db = await getDb();
+  await db
+    .update(schema.posts)
+    .set({ designStatus: "failed", lastError: friendlyError(error) })
+    .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId), eq(schema.posts.designStatus, "designing")));
+};
+
 const designPostJob: Handler = async (payload) => {
   const workspaceId = Number(payload.workspaceId);
   const postId = Number(payload.postId);
@@ -246,6 +274,10 @@ const autopilotJob: Handler = async (payload) => {
 const publishJob: Handler = async (payload) => {
   const { sendPublication } = await import("@/agent/publish");
   await sendPublication(Number(payload.workspaceId), Number(payload.publicationId));
+};
+
+designPostJob.onFinalFailure = async (payload, error) => {
+  await updatePost(Number(payload.workspaceId), Number(payload.postId), { designStatus: "failed", lastError: friendlyError(error) });
 };
 
 export const handlers = {

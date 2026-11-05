@@ -176,7 +176,18 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
             )}
 
             {post.status === "idea" ? (
-              <p className="text-sm text-zinc-500">Writing…</p>
+              post.lastError || campaign.status === "failed" ? (
+                <div data-testid="write-failed" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                  <span className="flex-1">Not written yet: {post.lastError ?? "the AI could not write this post."}</span>
+                  {canEdit && (
+                    <form action={rewritePostAction.bind(null, post.id)}>
+                      <button className="btn-secondary py-1">Try again</button>
+                    </form>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-500">Writing…</p>
+              )
             ) : (
               <div className="grid gap-5 md:grid-cols-[280px_1fr]">
                 <div className="space-y-2">
@@ -192,7 +203,14 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                     </a>
                   ) : (
                     <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-zinc-300 text-sm text-zinc-500">
-                      {post.designStatus === "failed" ? "Design failed — try again" : "Designing poster…"}
+                      {post.designStatus === "failed" ? (
+                        <span className="px-4 text-center">
+                          Design failed. Click &quot;New image&quot; below to try again.
+                          {post.lastError && <span className="mt-1 block text-xs text-red-700">{post.lastError}</span>}
+                        </span>
+                      ) : (
+                        "Designing poster…"
+                      )}
                     </div>
                   )}
                   {canEdit && (

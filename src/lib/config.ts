@@ -56,7 +56,8 @@ export function providerConfig(name: string): ProviderConfig | null {
         name,
         driver: "openai_compatible",
         apiKey: e.GROQ_API_KEY,
-        model: e.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+        // Your choice first, then current Groq models as backup (Groq retired Llama 3.3 in Aug 2026).
+        model: [e.GROQ_MODEL, "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"].filter(Boolean).join(","),
         baseUrl: e.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
         dailyLimit: num(e.GROQ_DAILY_LIMIT, 500),
         costPer1kInputUsd: 0,
@@ -67,7 +68,7 @@ export function providerConfig(name: string): ProviderConfig | null {
         name,
         driver: "openai_compatible",
         apiKey: e.OPENROUTER_API_KEY,
-        model: e.OPENROUTER_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free",
+        model: [e.OPENROUTER_MODEL, "openai/gpt-oss-120b:free", "meta-llama/llama-3.3-70b-instruct:free"].filter(Boolean).join(","),
         baseUrl: e.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
         dailyLimit: num(e.OPENROUTER_DAILY_LIMIT, 50),
         costPer1kInputUsd: 0,

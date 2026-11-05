@@ -210,6 +210,8 @@ export const posts = pgTable(
     reelStatus: varchar("reel_status", { length: 12 }).default("none").notNull(),
     reelScript: jsonb("reel_script").$type<ReelScript | null>(),
     reelError: text("reel_error"),
+    // Why the last write/design attempt failed (shown on the card with "Try again"); cleared on success.
+    lastError: text("last_error"),
     // Which parts were made by the built-in demo generator (not real AI): "text" | "image" | "video".
     // A post with any demo part cannot be approved.
     demoParts: jsonb("demo_parts").$type<string[]>().default([]).notNull(),

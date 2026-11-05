@@ -152,7 +152,7 @@ export async function getPost(workspaceId: number, id: number) {
 export async function updatePost(
   workspaceId: number,
   id: number,
-  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterSubline" | "posterKicker" | "posterTemplate" | "qcStatus" | "qcIssues" | "qcFixes" | "qcCheckedAt" | "designStatus" | "reelStatus" | "reelError">>,
+  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterSubline" | "posterKicker" | "posterTemplate" | "qcStatus" | "qcIssues" | "qcFixes" | "qcCheckedAt" | "designStatus" | "reelStatus" | "reelError" | "lastError">>,
 ) {
   const db = await getDb();
   const [row] = await db
@@ -527,4 +527,14 @@ export async function deleteProductShots(workspaceId: number, brandId: number, i
   await db
     .delete(schema.assets)
     .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.brandId, brandId), eq(schema.assets.kind, "product_shot"), inArray(schema.assets.id, ids)));
+}
+
+/** A short, plain message for the post card from a raw AI/job error. */
+export function friendlyError(raw: string): string {
+  if (/No text provider could answer|no model could answer|free limit|quota|busy|\b(429|503)\b|high demand/i.test(raw)) {
+    return "The AI is busy or out of free requests right now. Wait a few minutes and try again.";
+  }
+  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|fetch failed|timeout/i.test(raw)) return "Could not reach an online service (internet or storage). Try again.";
+  if (/AccessDenied|SignatureDoesNotMatch|InvalidAccessKeyId|NoSuchBucket/i.test(raw)) return "Storage (Supabase) refused the file. Check the S3 keys and bucket.";
+  return raw.replace(/\s+/g, " ").slice(0, 200);
 }
