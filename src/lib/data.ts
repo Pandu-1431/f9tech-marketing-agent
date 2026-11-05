@@ -152,7 +152,7 @@ export async function getPost(workspaceId: number, id: number) {
 export async function updatePost(
   workspaceId: number,
   id: number,
-  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterSubline" | "posterKicker" | "posterTemplate" | "designStatus" | "reelStatus" | "reelError">>,
+  values: Partial<Pick<typeof schema.posts.$inferInsert, "caption" | "hashtags" | "imagePrompt" | "seoKeywords" | "status" | "reviewNote" | "posterHeadline" | "posterCta" | "posterSubline" | "posterKicker" | "posterTemplate" | "qcStatus" | "qcIssues" | "qcFixes" | "qcCheckedAt" | "designStatus" | "reelStatus" | "reelError">>,
 ) {
   const db = await getDb();
   const [row] = await db
@@ -193,7 +193,7 @@ export class DemoContentError extends Error {
 
 // ---------- Versions and approval ----------
 
-export type VersionReason = "caption" | "ai_write" | "ai_rewrite" | "poster" | "reel";
+export type VersionReason = "caption" | "ai_write" | "ai_rewrite" | "poster" | "reel" | "qc_fix";
 
 export class StaleVersionError extends Error {
   constructor() {
@@ -353,6 +353,7 @@ const VERSION_LABELS: Record<string, string> = {
   ai_rewrite: "AI rewrote the caption",
   poster: "New poster",
   reel: "New reel video",
+  qc_fix: "Quality checker fixed it",
   backfill: "Saved before version tracking",
 };
 

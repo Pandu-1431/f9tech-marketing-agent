@@ -71,6 +71,13 @@
       "when": 1793854423898,
       "tag": "0009_brand_kit_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793872587655,
+      "tag": "0010_quality_checker",
+      "breakpoints": true
     }
   ]
 }

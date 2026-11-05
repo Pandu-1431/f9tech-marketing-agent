@@ -71,6 +71,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       </div>
 
       {campaign.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{campaign.error}</p>}
+      <QualitySummary posts={posts} />
       {demoMedia > 0 && (
         <div data-testid="demo-media-banner" className="flex flex-wrap items-center gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <p className="min-w-60 flex-1">
@@ -265,6 +266,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                   </div>
                 </div>
                 <div className="space-y-3">
+                <QualityPanel post={post} canEdit={canEdit} />
                 <form action={editPostAction.bind(null, post.id)} className="space-y-2">
                   <textarea className="input" name="caption" rows={5} defaultValue={post.caption ?? ""} readOnly={!canEdit} />
                   <input className="input" name="hashtags" defaultValue={post.hashtags.join(" ")} readOnly={!canEdit} />
@@ -420,5 +422,54 @@ function DemoStamp() {
     >
       Demo · not real AI
     </span>
+  );
+}
+
+/** One line for the whole campaign: how many posts passed the quality check. */
+function QualitySummary({ posts }: { posts: Post[] }) {
+  const checked = posts.filter((p) => p.qcStatus !== "none");
+  if (!checked.length) return null;
+  const count = (s: string) => checked.filter((p) => p.qcStatus === s).length;
+  const fail = count("fail");
+  const warn = count("warn");
+  return (
+    <p data-testid="qc-summary" className={`rounded-lg px-3 py-2 text-sm ${fail ? "bg-red-50 text-red-800" : warn ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
+      <b>Quality check:</b> {count("pass")} of {checked.length} posts passed
+      {warn > 0 && <>, {warn} with tips</>}
+      {fail > 0 && <>, {fail} need fixing</>}.
+    </p>
+  );
+}
+
+/** What the quality checker found on one post, with a one-click fix. */
+function QualityPanel({ post, canEdit }: { post: Post; canEdit: boolean }) {
+  if (post.status === "idea" || post.qcStatus === "none") return null;
+  if (post.qcStatus === "pass") {
+    return (
+      <p data-testid="qc-pass" className="text-sm text-emerald-700">
+        ✓ Quality check passed: facts, wording, hashtags and poster look right.
+      </p>
+    );
+  }
+  const fail = post.qcStatus === "fail";
+  const canFix = canEdit && post.qcIssues.some((i) => i.fix === "rewrite") && post.demoParts.length === 0;
+  return (
+    <div data-testid={`qc-${post.qcStatus}`} className={`rounded-lg border px-3 py-2 text-sm ${fail ? "border-red-300 bg-red-50 text-red-900" : "border-amber-300 bg-amber-50 text-amber-900"}`}>
+      <p className="font-medium">{fail ? "Quality check: needs fixing before it goes out" : "Quality check: tips"}</p>
+      <ul className="mt-1 list-disc space-y-0.5 pl-5">
+        {post.qcIssues.map((i) => (
+          <li key={i.code}>
+            {i.level === "fail" ? <b>Fix: </b> : null}
+            {i.message}
+          </li>
+        ))}
+      </ul>
+      {post.qcFixes > 0 && fail && <p className="mt-1 text-xs">The agent already tried to fix this by itself. Edit it, add the fact to Key facts, or fix with AI again.</p>}
+      {canFix && (
+        <form action={rewritePostAction.bind(null, post.id)} className="mt-2">
+          <button className="btn-secondary py-1">Fix with AI</button>
+        </form>
+      )}
+    </div>
   );
 }

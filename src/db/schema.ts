@@ -19,6 +19,7 @@ import {
  * and every read/write goes through src/lib/data, which always filters by it.
  */
 
+export type QcIssue = { code: string; level: "fail" | "warn"; message: string; fix?: "rewrite" | "hashtags" };
 export type ReelScene = { voiceover: string; onScreen: string; imagePrompt: string };
 export type ReelScript = { title: string; scenes: ReelScene[]; cta: string; voice?: string; durationSec?: number };
 
@@ -204,6 +205,11 @@ export const posts = pgTable(
     demoParts: jsonb("demo_parts").$type<string[]>().default([]).notNull(),
     // Approval lock: every caption or creative change saves a new version (post_versions).
     // Approval is for one version only; any later change sends the post back to review.
+    // Quality checker: none | pass | warn | fail, what it found, and how often it rewrote the post itself.
+    qcStatus: varchar("qc_status", { length: 10 }).default("none").notNull(),
+    qcIssues: jsonb("qc_issues").$type<QcIssue[]>().default([]).notNull(),
+    qcFixes: integer("qc_fixes").default(0).notNull(),
+    qcCheckedAt: timestamp("qc_checked_at", { withTimezone: true }),
     currentVersion: integer("current_version").default(0).notNull(),
     approvedVersion: integer("approved_version"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

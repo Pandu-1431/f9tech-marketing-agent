@@ -24,6 +24,7 @@ import {
 } from "@/lib/data";
 import { enqueue, processJobs } from "@/jobs/queue";
 import type { FormState } from "./auth";
+import { qualityGate } from "@/agent/quality-gate";
 import { POSTER_TEMPLATES } from "@/agent/images/poster";
 import { FORMATS } from "@/agent/planner";
 import { CAMPAIGN_TYPE_KEYS, type CampaignType } from "@/lib/campaign-types";
@@ -145,6 +146,7 @@ export async function editPostAction(postId: number, formData: FormData) {
   // A person wrote or checked this caption, so it is no longer demo text.
   await setDemoPart(workspace.id, postId, "text", false);
   await recordPostVersion(workspace.id, postId, "caption", user.id);
+  await qualityGate(workspace.id, postId, { autoFix: false });
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
 

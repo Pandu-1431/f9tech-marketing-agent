@@ -5,6 +5,8 @@ import { chunk, mapLimit, parallelism } from "@/lib/concurrency";
 import { planCampaign } from "@/agent/planner";
 import { QuotaExceededError } from "@/agent/router";
 import { designPost } from "@/agent/designer";
+import { qualityGate } from "@/agent/quality-gate";
+import { fixNotes } from "@/agent/quality";
 import { makeReel } from "@/agent/video/reel";
 import type { PosterTemplate } from "@/agent/images/poster";
 import { TrialEndedError } from "@/lib/plan";
@@ -122,12 +124,15 @@ const rewritePostJob: Handler = async (payload) => {
   const brand = await getBrand(workspaceId, post.brandId);
   if (!campaign || !brand) throw permanent("Campaign or brand not found");
   try {
-    const { demo, ...copy } = await writePostCopy(campaign, brand, post);
+    // The reviewer's note and the quality checker's findings tell the copywriter what to change.
+    const notes = [post.reviewNote ?? "", ...fixNotes(post.qcIssues ?? [])];
+    const { demo, ...copy } = await writePostCopy(campaign, brand, post, { notes });
     await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null, designStatus: "designing" });
     await setDemoPart(workspaceId, post.id, "text", demo);
     await recordPostVersion(workspaceId, post.id, "ai_rewrite");
     const fresh = { ...post, ...copy, posterTemplate: copy.posterTemplate ?? post.posterTemplate, status: "drafted" };
     await designPost(fresh, brand);
+    await qualityGate(workspaceId, post.id, { autoFix: false });
   } catch (err) {
     if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
     throw err;
@@ -154,6 +159,8 @@ const designCampaignJob: Handler = async (payload) => {
     try {
       await updatePost(workspaceId, post.id, { designStatus: "designing" });
       await designPost(post, brand);
+      // Quality checker: checks the post and fixes what it can before a person sees it.
+      await qualityGate(workspaceId, post.id);
     } catch (err) {
       await updatePost(workspaceId, post.id, { designStatus: "failed" });
       if (err instanceof QuotaExceededError || err instanceof TrialEndedError) stop = true;
@@ -187,6 +194,7 @@ const reelPostJob: Handler = async (payload) => {
   try {
     await updatePost(workspaceId, postId, { reelStatus: "making", reelError: null });
     await makeReel(campaign, brand, post);
+    await qualityGate(workspaceId, postId, { autoFix: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await updatePost(workspaceId, postId, { reelStatus: "failed", reelError: message.slice(0, 500) });
@@ -215,6 +223,7 @@ const designPostJob: Handler = async (payload) => {
       newBackground: Boolean(payload.newBackground),
       template: (payload.template as PosterTemplate | undefined) ?? undefined,
     });
+    await qualityGate(workspaceId, postId, { autoFix: false });
   } catch (err) {
     await updatePost(workspaceId, postId, { designStatus: "failed" });
     if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
