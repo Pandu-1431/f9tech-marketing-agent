@@ -82,12 +82,19 @@ describe("publishers", () => {
     await expect(publishTelegram({ token: "bad", config: { chatId: "@x" } }, { text: "hi" })).rejects.toBeInstanceOf(PublishConfigError);
   });
 
+  it("Facebook: swaps a user/system token for the Page token before posting", async () => {
+    stubApis((c) => (c.url.includes("fields=access_token") ? new Response(JSON.stringify({ access_token: "PAGE_TOKEN", id: "123" }), { status: 200 }) : undefined));
+    await publishFacebook({ token: "SYSTEM_USER", config: { pageId: "123" } }, { text: "Hi", image: { data: png, mime: "image/png" } });
+    const post = calls.find((c) => c.url.endsWith("/123/photos"))!;
+    expect(post.form?.get("access_token")).toBe("PAGE_TOKEN");
+  });
+
   it("Facebook: uploads the poster to the Page", async () => {
     stubApis();
     const r = await publishFacebook({ token: "P", config: { pageId: "123" } }, { text: "Hello", image: { data: png, mime: "image/png" } });
-    expect(calls[0].url).toMatch(/\/v\d+\.\d+\/123\/photos$/);
-    expect(calls[0].form?.get("message")).toBe("Hello");
-    expect(calls[0].form?.get("access_token")).toBe("P");
+    const upload = calls.find((c) => /\/v\d+\.\d+\/123\/photos$/.test(c.url))!;
+    expect(upload.form?.get("message")).toBe("Hello");
+    expect(upload.form?.get("access_token")).toBe("P"); // already a Page token: used as is
     expect(r.url).toBe("https://www.facebook.com/page_1");
   });
 

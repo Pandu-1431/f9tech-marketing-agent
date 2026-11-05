@@ -34,12 +34,26 @@ async function graph(method: "GET" | "POST", path: string, token: string, body?:
   return json;
 }
 
+/**
+ * Posting on a Page needs the PAGE's own token. People often paste a user or system-user token,
+ * so ask Facebook for the Page token with it (works when that user can manage the Page).
+ */
+async function pageToken(auth: ChannelAuth): Promise<string> {
+  try {
+    const page = await graph("GET", auth.config.pageId, auth.token, { fields: "access_token" });
+    return typeof page.access_token === "string" && page.access_token ? page.access_token : auth.token;
+  } catch {
+    return auth.token; // already a Page token (it can't read its own access_token field)
+  }
+}
+
 export async function testFacebook(auth: ChannelAuth): Promise<string> {
-  const page = await graph("GET", auth.config.pageId, auth.token, { fields: "name" });
+  const page = await graph("GET", auth.config.pageId, await pageToken(auth), { fields: "name" });
   return String(page.name ?? auth.config.pageId);
 }
 
-export async function publishFacebook(auth: ChannelAuth, input: PublishInput): Promise<PublishResult> {
+export async function publishFacebook(original: ChannelAuth, input: PublishInput): Promise<PublishResult> {
+  const auth = { ...original, token: await pageToken(original) };
   const pageId = auth.config.pageId;
   if (input.video) {
     const form = new FormData();
