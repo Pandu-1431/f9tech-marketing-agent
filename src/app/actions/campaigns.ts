@@ -246,3 +246,18 @@ export async function replaceDemoMediaAction(campaignId: number) {
   kickJobs();
   revalidatePath(`/campaigns/${campaignId}`);
 }
+
+/** One click: approve every post in the campaign that passed the quality check and is ready. */
+export async function approveAllPassedAction(campaignId: number) {
+  const { workspace, user } = await requireAuth();
+  const posts = await listCampaignPosts(workspace.id, campaignId);
+  for (const post of posts) {
+    if (post.qcStatus !== "pass" || post.status !== "drafted" || post.demoParts.length > 0 || post.currentVersion < 1) continue;
+    try {
+      await reviewPost(workspace.id, post.id, "approved", null, { userId: user.id, version: post.currentVersion });
+    } catch (err) {
+      if (!(err instanceof DemoContentError || err instanceof StaleVersionError || err instanceof BusyPostError)) throw err;
+    }
+  }
+  revalidatePath(`/campaigns/${campaignId}`);
+}

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { deleteBrandAction, updateBrandAction } from "@/app/actions/brands";
 import { BrandForm } from "@/components/brand-form";
+import { AutopilotForm } from "@/components/autopilot-form";
 import { timeZoneOptions } from "@/lib/schedule";
 import { requireEditor } from "@/lib/auth";
 import { getBrand, listProductShots } from "@/lib/data";
@@ -21,6 +22,7 @@ export default async function EditBrandPage({ params }: { params: Promise<{ id: 
           <button className="btn-danger">Delete</button>
         </form>
       </div>
+      <AutopilotForm brand={brand} />
       <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" timeZones={timeZoneOptions()} shots={shots} />
     </div>
   );

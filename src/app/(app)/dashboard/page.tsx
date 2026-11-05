@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { canEditContent } from "@/lib/team";
 import { freePlan, textChain } from "@/lib/config";
-import { countBrands, listCampaigns, postStatusCounts, recentGenerations } from "@/lib/data";
+import { countBrands, listBrands, listCampaigns, postStatusCounts, recentGenerations } from "@/lib/data";
+import { formatSlot } from "@/lib/schedule";
 import { workspaceTextUsageThisMonth } from "@/agent/router";
 import { workspaceImageUsageThisMonth } from "@/agent/images/router";
 import { workspaceVideosThisMonth } from "@/agent/video/reel";
@@ -37,6 +38,8 @@ export default async function DashboardPage() {
     listCampaigns(workspace.id),
     recentGenerations(workspace.id, 10),
   ]);
+  const brands = await listBrands(workspace.id);
+  const autopilotOn = brands.filter((b) => b.autopilotEnabled);
 
   return (
     <div className="space-y-8">
@@ -76,6 +79,32 @@ export default async function DashboardPage() {
           <Link href="/brands/new" className="btn mt-3">Add business account</Link>
         </div>
       )}
+
+      <section className="card" data-testid="autopilot-card">
+        <h2 className="font-semibold">Weekly autopilot</h2>
+        {autopilotOn.length === 0 ? (
+          <p className="mt-1 text-sm text-zinc-600">
+            Off. Turn it on in a business account (Brands → Edit → Weekly autopilot) and the AI team plans and makes every week for you.
+          </p>
+        ) : (
+          <ul className="mt-2 divide-y divide-zinc-100 text-sm">
+            {autopilotOn.map((b) => {
+              const latest = campaigns.find(({ campaign }) => campaign.brandId === b.id && campaign.source === "autopilot");
+              return (
+                <li key={b.id} className="flex flex-wrap items-center gap-2 py-2">
+                  <span className="font-medium">{b.name}</span>
+                  <span className="text-zinc-500">next plan {b.autopilotNextRunAt ? formatSlot(b.autopilotNextRunAt, b.timezone) : "—"}</span>
+                  {latest && (
+                    <Link href={`/campaigns/${latest.campaign.id}`} className="ml-auto text-indigo-600 hover:underline">
+                      This week: {latest.campaign.theme} →
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="card">

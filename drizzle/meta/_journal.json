@@ -78,6 +78,13 @@
       "when": 1793872587655,
       "tag": "0010_quality_checker",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793878476992,
+      "tag": "0011_weekly_autopilot",
+      "breakpoints": true
     }
   ]
 }

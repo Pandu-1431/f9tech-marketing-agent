@@ -59,6 +59,7 @@ describe("Brand Kit v2: Indian style and simple language", () => {
       tone: null, language: "English", colors: [], fonts: [], keywords: [], hashtags: [], platforms: [], dos: null, donts: null,
       services: null, timezone: "Asia/Kolkata", logoUrl: null, logoKey: null, visualStyle: null,
       keyFacts: "2,476 real UPSC past questions\nFree, no ads", createdAt: new Date(), updatedAt: new Date(),
+      autopilotEnabled: false, autopilotDay: 1, autopilotPostsPerWeek: 5, autopilotPlatforms: [], autopilotFormats: [], autopilotNextRunAt: null, autopilotLastRunAt: null,
     });
     expect(system).toContain("BRAND KEY FACTS");
     expect(system).toContain("2,476 real UPSC past questions");

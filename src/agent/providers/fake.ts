@@ -85,6 +85,16 @@ export class FakeProvider implements TextProvider {
         poster_kicker: ["Diwali", "Tip", "", "New"][(n - 1) % 4],
         poster_template: ["band", "tip", "bignumber", "split"][(n - 1) % 4],
       });
+    } else if (p.includes("TASK: WEEKLY_THEME")) {
+      const service = /SERVICES \/ FEATURES: ([^;\n]+)/.exec(p)?.[1];
+      const date = /DATES THAT MATTER:\n- \d{4}-\d{2}-\d{2}: ([^\n(]+)/.exec(p)?.[1]?.trim();
+      text = JSON.stringify({
+        theme: date ? `Celebrate ${date}` : service ? `Spotlight: ${service}` : "Why people choose us",
+        goal: "Grow reach and enquiries this week",
+        campaign_type: date ? "observance" : "general",
+        call_to_action: "Message us today",
+        why: date ? "A national day falls this week" : "This service had no recent week",
+      });
     } else if (p.includes("TASK: REEL_SCRIPT")) {
       const theme = /CAMPAIGN THEME: ([^\n]+)/.exec(p)?.[1] ?? "our offer";
       const brand = /Name: ([^\n]+)/.exec(req.system)?.[1] ?? "us";

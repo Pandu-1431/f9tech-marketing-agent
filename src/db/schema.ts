@@ -113,6 +113,14 @@ export const brands = pgTable(
     timezone: varchar("timezone", { length: 60 }).default("Asia/Kolkata").notNull(),
     logoUrl: text("logo_url"),
     logoKey: text("logo_key"),
+    // Weekly autopilot: every week on this day (0 = Sunday ... 6 = Saturday) the AI team plans and makes the week.
+    autopilotEnabled: boolean("autopilot_enabled").default(false).notNull(),
+    autopilotDay: integer("autopilot_day").default(1).notNull(),
+    autopilotPostsPerWeek: integer("autopilot_posts_per_week").default(5).notNull(),
+    autopilotPlatforms: jsonb("autopilot_platforms").$type<string[]>().default([]).notNull(),
+    autopilotFormats: jsonb("autopilot_formats").$type<string[]>().default([]).notNull(),
+    autopilotNextRunAt: timestamp("autopilot_next_run_at", { withTimezone: true }),
+    autopilotLastRunAt: timestamp("autopilot_last_run_at", { withTimezone: true }),
     // Brand Kit v2. Photo look for every AI image (people, places, mood, banned looks).
     visualStyle: text("visual_style"),
     // Approved facts about the business (numbers, features, dates). The only facts AI may state.
@@ -154,6 +162,8 @@ export const campaigns = pgTable(
     formats: jsonb("formats").$type<string[]>().default(["image", "carousel", "reel", "story", "text"]).notNull(),
     // draft | planning | writing | ready | failed
     status: varchar("status", { length: 20 }).default("draft").notNull(),
+    // manual = a person made it; autopilot = the weekly autopilot made it.
+    source: varchar("source", { length: 20 }).default("manual").notNull(),
     strategy: text("strategy"),
     error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

@@ -231,7 +231,19 @@ const designPostJob: Handler = async (payload) => {
   }
 };
 
+/** Weekly autopilot: pick the week's theme and start the campaign pipeline. */
+const autopilotJob: Handler = async (payload) => {
+  const { runAutopilot } = await import("@/agent/autopilot");
+  try {
+    await runAutopilot(Number(payload.workspaceId), Number(payload.brandId), { now: payload.at ? new Date(String(payload.at)) : undefined });
+  } catch (err) {
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
+    throw err;
+  }
+};
+
 export const handlers = {
+  "autopilot.run": autopilotJob,
   "campaign.plan": planCampaignJob,
   "campaign.write": writeCampaignJob,
   "post.rewrite": rewritePostJob,

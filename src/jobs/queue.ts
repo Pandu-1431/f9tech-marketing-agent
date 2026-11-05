@@ -122,6 +122,7 @@ export function startInlineWorker(everyMs = 3000) {
   g.__agentWorker = true;
   let busy = false;
   let first = true;
+  let lastAutopilotCheck = 0;
   const startedAt = new Date();
   setInterval(async () => {
     if (busy) return;
@@ -130,6 +131,12 @@ export function startInlineWorker(everyMs = 3000) {
       // On server start, anything marked "running" was interrupted: requeue it now.
       await recoverStaleJobs(10, first ? startedAt : undefined);
       first = false;
+      // Weekly autopilot: once a minute, queue the brands whose planning day has come.
+      if (Date.now() - lastAutopilotCheck > 60_000) {
+        lastAutopilotCheck = Date.now();
+        const { queueDueAutopilots } = await import("@/agent/autopilot");
+        await queueDueAutopilots();
+      }
       await processJobs(20);
     } catch (err) {
       console.error("[agent worker]", err);

@@ -36,6 +36,7 @@ export default async function CampaignsPage() {
                 <tr key={campaign.id} className="hover:bg-zinc-50">
                   <td className="px-5 py-3">
                     <Link href={`/campaigns/${campaign.id}`} className="font-medium hover:text-indigo-600">{campaign.theme}</Link>
+                    {campaign.source === "autopilot" && <span className="badge ml-2 bg-indigo-50 text-indigo-700">Autopilot</span>}
                   </td>
                   <td className="text-zinc-600">{campaignTypeLabel(campaign.campaignType)}</td>
                   <td>{brandName}</td>

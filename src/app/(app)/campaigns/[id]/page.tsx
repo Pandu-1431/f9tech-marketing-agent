@@ -9,6 +9,7 @@ import {
   retryCampaignAction,
   reviewPostAction,
   rewritePostAction,
+  approveAllPassedAction,
 } from "@/app/actions/campaigns";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { PLATFORM_LABELS } from "@/lib/platforms";
@@ -55,7 +56,10 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm text-zinc-500">{brand?.name}</p>
-          <h1 className="text-2xl font-semibold">{campaign.theme}</h1>
+          <h1 className="text-2xl font-semibold">
+            {campaign.theme}
+            {campaign.source === "autopilot" && <span className="badge ml-2 align-middle bg-indigo-50 text-indigo-700">Autopilot</span>}
+          </h1>
           <p className="text-sm text-zinc-500">
             {campaign.startDate} → {campaign.endDate} · {campaign.platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(", ")}
           </p>
@@ -72,6 +76,15 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
       {campaign.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{campaign.error}</p>}
       <QualitySummary posts={posts} />
+      {(() => {
+        const ready = posts.filter((p) => p.qcStatus === "pass" && p.status === "drafted" && p.demoParts.length === 0 && p.currentVersion > 0).length;
+        return ready > 0 ? (
+          <form action={approveAllPassedAction.bind(null, campaign.id)} className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
+            <span className="flex-1 text-emerald-900">{ready} post{ready === 1 ? "" : "s"} passed every check and wait for you.</span>
+            <button className="btn">Approve all {ready}</button>
+          </form>
+        ) : null;
+      })()}
       {demoMedia > 0 && (
         <div data-testid="demo-media-banner" className="flex flex-wrap items-center gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <p className="min-w-60 flex-1">
