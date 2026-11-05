@@ -11,6 +11,13 @@ test("weekly autopilot: turn it on, plan this week now, the week's campaign appe
   await page.getByText("Autopilot Academy").first().click();
   await page.waitForURL("**/brands/*", { waitUntil: "commit" });
 
+  // YouTube box: without Google keys it explains what is needed; the connect route says so too.
+  await expect(page.getByTestId("youtube-connect")).toContainText("GOOGLE_CLIENT_ID");
+  const brandUrl = page.url();
+  await page.goto(`/api/oauth/google/start?brandId=${brandUrl.split("/").pop()}`);
+  await expect(page.getByTestId("youtube-connect")).toContainText("Add GOOGLE_CLIENT_ID");
+  await page.goto(brandUrl);
+
   const box = page.getByTestId("autopilot");
   await box.getByLabel("Turn on weekly autopilot").check();
   await box.getByRole("button", { name: "Save autopilot" }).click();

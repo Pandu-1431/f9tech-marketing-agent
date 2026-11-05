@@ -4,14 +4,16 @@ import { BrandForm } from "@/components/brand-form";
 import { AutopilotForm } from "@/components/autopilot-form";
 import { ChannelsSection } from "@/components/channels-section";
 import { listChannels } from "@/agent/publish";
+import { googleConfigured } from "@/agent/publish/youtube";
 import { timeZoneOptions } from "@/lib/schedule";
 import { requireEditor } from "@/lib/auth";
 import { getBrand, listProductShots } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
-export default async function EditBrandPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditBrandPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ youtube?: string }> }) {
   const { workspace } = await requireEditor();
   const { id } = await params;
+  const { youtube } = await searchParams;
   const brand = await getBrand(workspace.id, Number(id));
   if (!brand) notFound();
   const shots = (await listProductShots(workspace.id, brand.id)).map((s) => ({ id: s.id, url: publicUrl(s.storageKey), label: s.prompt ?? "app screen" }));
@@ -25,7 +27,7 @@ export default async function EditBrandPage({ params }: { params: Promise<{ id: 
         </form>
       </div>
       <AutopilotForm brand={brand} />
-      <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} />
+      <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} youtubeReady={googleConfigured()} youtubeStatus={youtube} />
       <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" timeZones={timeZoneOptions()} shots={shots} />
     </div>
   );

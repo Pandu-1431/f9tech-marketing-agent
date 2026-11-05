@@ -4,7 +4,18 @@ import { ChannelForm } from "./channel-form";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 
 /** Where this business publishes: Telegram, Facebook Page, Instagram. */
-export function ChannelsSection({ brand, channels }: { brand: Brand; channels: Channel[] }) {
+const YOUTUBE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
+  connected: { ok: true, text: "YouTube connected. Approved reels on YouTube now upload as Shorts." },
+  cancelled: { ok: false, text: "You cancelled the Google sign-in. Click Connect YouTube to try again." },
+  "no-channel": { ok: false, text: "That Google account has no YouTube channel. Sign in with the account that owns the Chakravyuh channel." },
+  expired: { ok: false, text: "The sign-in took too long. Click Connect YouTube again." },
+  failed: { ok: false, text: "Google sign-in failed. Check the Google Client ID/Secret and the redirect address, then try again." },
+  "not-configured": { ok: false, text: "Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first (see the steps)." },
+};
+
+export function ChannelsSection({ brand, channels, youtubeReady = false, youtubeStatus }: { brand: Brand; channels: Channel[]; youtubeReady?: boolean; youtubeStatus?: string }) {
+  const yt = youtubeStatus ? YOUTUBE_MESSAGES[youtubeStatus] : undefined;
+  const ytChannel = channels.find((c) => c.platform === "youtube");
   return (
     <section className="card space-y-4" data-testid="channels">
       <div>
@@ -27,7 +38,7 @@ export function ChannelsSection({ brand, channels }: { brand: Brand; channels: C
           ))}
         </ul>
       )}
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <ChannelForm
           title="Telegram channel"
           help={<>Free and instant. 1) In Telegram, open @BotFather → /newbot, copy the token. 2) Add the bot to your channel as an admin who can post. 3) Channel = @yourchannel.</>}
@@ -55,6 +66,21 @@ export function ChannelsSection({ brand, channels }: { brand: Brand; channels: C
           ]}
           action={connectChannelAction.bind(null, brand.id, "instagram")}
         />
+        <div className="space-y-2 rounded-lg border border-zinc-200 p-3" data-testid="youtube-connect">
+          <p className="font-medium">YouTube Shorts</p>
+          <div className="text-xs text-zinc-600">
+            Sign in with the Google account that owns the channel. Approved reels upload as Shorts. Uploads from a new Google project stay
+            private until Google&apos;s API audit; make them public in YouTube Studio.
+          </div>
+          {youtubeReady ? (
+            <a href={`/api/oauth/google/start?brandId=${brand.id}`} className="btn-secondary inline-block">
+              {ytChannel ? "Reconnect YouTube" : "Connect YouTube"}
+            </a>
+          ) : (
+            <p className="text-xs text-amber-800">Needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local, then restart the app.</p>
+          )}
+          {yt && <p className={`text-sm ${yt.ok ? "text-emerald-700" : "text-red-700"}`}>{yt.text}</p>}
+        </div>
       </div>
     </section>
   );

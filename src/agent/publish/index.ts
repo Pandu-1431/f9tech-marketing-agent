@@ -6,6 +6,7 @@ import { isApprovedForPublish } from "@/lib/data";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { publishFacebook, publishInstagram, testFacebook, testInstagram } from "./meta";
 import { publishTelegram, testTelegram } from "./telegram";
+import { publishYouTube, testYouTube } from "./youtube";
 import { PublishConfigError, type ChannelAuth, type PublishInput, type PublishResult } from "./types";
 
 /*
@@ -14,13 +15,14 @@ import { PublishConfigError, type ChannelAuth, type PublishInput, type PublishRe
  * at the post's scheduled time. A version is never sent twice to the same channel.
  */
 
-export const CHANNEL_PLATFORMS = ["telegram", "facebook", "instagram"] as const;
+export const CHANNEL_PLATFORMS = ["telegram", "facebook", "instagram", "youtube"] as const;
 export type ChannelPlatform = (typeof CHANNEL_PLATFORMS)[number];
 
 const ADAPTERS: Record<ChannelPlatform, { test: (a: ChannelAuth) => Promise<string>; publish: (a: ChannelAuth, i: PublishInput) => Promise<PublishResult> }> = {
   telegram: { test: testTelegram, publish: publishTelegram },
   facebook: { test: testFacebook, publish: publishFacebook },
   instagram: { test: testInstagram, publish: publishInstagram },
+  youtube: { test: testYouTube, publish: publishYouTube },
 };
 
 export const isChannelPlatform = (p: string): p is ChannelPlatform => (CHANNEL_PLATFORMS as readonly string[]).includes(p);
@@ -28,6 +30,11 @@ export const isChannelPlatform = (p: string): p is ChannelPlatform => (CHANNEL_P
 /** Test the credentials, then save (or replace) the brand's channel for that platform. */
 export async function connectChannel(workspaceId: number, brandId: number, platform: ChannelPlatform, token: string, config: Record<string, string>) {
   const name = await ADAPTERS[platform].test({ token, config });
+  return saveChannel(workspaceId, brandId, platform, name, token, config);
+}
+
+/** Save (or replace) a channel whose credentials were already checked (e.g. after Google sign-in). */
+export async function saveChannel(workspaceId: number, brandId: number, platform: ChannelPlatform, name: string, token: string, config: Record<string, string>) {
   const db = await getDb();
   await db.delete(schema.channels).where(and(eq(schema.channels.workspaceId, workspaceId), eq(schema.channels.brandId, brandId), eq(schema.channels.platform, platform)));
   const [row] = await db.insert(schema.channels).values({ workspaceId, brandId, platform, name, config, secret: encryptSecret(token) }).returning();
