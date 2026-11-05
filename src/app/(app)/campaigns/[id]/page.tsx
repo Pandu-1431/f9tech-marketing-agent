@@ -223,7 +223,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                         {videos.get(post.id)!.demo && <DemoStamp />}
                         <video
                           src={publicUrl(videos.get(post.id)!.storageKey)}
-                          poster={posters.get(post.id) ? publicUrl(posters.get(post.id)!.storageKey) : undefined}
+                          poster={post.reelScript?.coverKey ? publicUrl(post.reelScript.coverKey) : posters.get(post.id) ? publicUrl(posters.get(post.id)!.storageKey) : undefined}
                           controls
                           preload="metadata"
                           playsInline
@@ -232,6 +232,14 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                         <p className="mt-1 text-xs text-zinc-500">
                           {post.reelScript?.durationSec ? `${post.reelScript.durationSec}s · ` : ""}
                           {post.reelScript?.scenes.length ?? 0} scenes · voice: {post.reelScript?.voice ?? "—"}
+                          {post.reelScript?.coverKey && (
+                            <>
+                              {" · "}
+                              <a href={publicUrl(post.reelScript.coverKey)} download={`reel-${post.id}-cover.png`} className="underline">
+                                Cover image
+                              </a>
+                            </>
+                          )}
                         </p>
                       </div>
                     ) : (

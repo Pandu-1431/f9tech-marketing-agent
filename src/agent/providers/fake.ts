@@ -92,7 +92,7 @@ export class FakeProvider implements TextProvider {
         title: `${theme} — reel`,
         scenes: [
           { voiceover: `Looking for the perfect festive gift? Stop scrolling.`, on_screen: "The perfect festive gift?", image_prompt: "festive gift box with sweets, warm light" },
-          { voiceover: `At ${brand}, every sweet is made fresh, every single morning.`, on_screen: "Made fresh every morning", image_prompt: "sweets being made in a clean kitchen" },
+          { voiceover: `At ${brand}, every sweet is made fresh, every single morning.`, on_screen: "Made fresh every morning", image_prompt: "sweets being made in a clean kitchen", ...(p.includes("PRODUCT SHOTS") ? { shot: 1 } : {}) },
           { voiceover: `This week only: ${theme}.`, on_screen: "This week only", image_prompt: "beautiful gift boxes stacked on a shop counter" },
           { voiceover: `Pre-order on WhatsApp and pick it up the same day.`, on_screen: "Pre-order today", image_prompt: "smiling customer receiving a gift box" },
         ],

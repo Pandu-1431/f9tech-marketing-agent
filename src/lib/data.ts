@@ -505,3 +505,26 @@ export async function lastProviderFailure(workspaceId: number, task: "image" | "
     .limit(1);
   return row ?? null;
 }
+
+// ---------- Product shots: screenshots of the brand's app or website, used in reels ----------
+
+export const MAX_PRODUCT_SHOTS = 8;
+
+/** The brand's product shots, oldest first (the order is the number the script uses: 1, 2, 3...). */
+export async function listProductShots(workspaceId: number, brandId: number) {
+  const db = await getDb();
+  return db
+    .select()
+    .from(schema.assets)
+    .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.brandId, brandId), eq(schema.assets.kind, "product_shot")))
+    .orderBy(asc(schema.assets.id))
+    .limit(MAX_PRODUCT_SHOTS);
+}
+
+export async function deleteProductShots(workspaceId: number, brandId: number, ids: number[]) {
+  if (!ids.length) return;
+  const db = await getDb();
+  await db
+    .delete(schema.assets)
+    .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.brandId, brandId), eq(schema.assets.kind, "product_shot"), inArray(schema.assets.id, ids)));
+}

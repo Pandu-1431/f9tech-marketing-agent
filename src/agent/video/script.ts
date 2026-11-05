@@ -13,6 +13,7 @@ const schema = z.object({
         voiceover: z.string().min(1),
         on_screen: z.string().default(""),
         image_prompt: z.string().default(""),
+        shot: z.coerce.number().int().optional().nullable(),
       }),
     )
     .min(2)
@@ -20,7 +21,7 @@ const schema = z.object({
   cta: z.string().default(""),
 });
 
-export function reelPrompt(campaign: Campaign, post: Post): string {
+export function reelPrompt(campaign: Campaign, post: Post, shots: string[] = []): string {
   return [
     "TASK: REEL_SCRIPT",
     `CAMPAIGN THEME: ${campaign.theme}`,
@@ -38,21 +39,29 @@ export function reelPrompt(campaign: Campaign, post: Post): string {
     "- on_screen: big text shown on screen, max 6 words, the key point of the scene.",
     "- image_prompt: one realistic vertical photo for the scene, set in India with Indian people and places where people appear (subject, setting, mood). No text in the image.",
     "- Only use facts from the brand key facts and the campaign brief.",
+    ...(shots.length
+      ? [
+          "",
+          "PRODUCT SHOTS (real screenshots of the product; showing the real product builds trust):",
+          ...shots.map((label, i) => `${i + 1}. ${label}`),
+          '- In 1 or 2 scenes that talk about the product, set "shot" to the number of the best matching screenshot; it is shown in a phone instead of a photo. Other scenes: leave "shot" out.',
+        ]
+      : []),
     "- cta: 2-4 word button text for the last scene (e.g. \"Order on WhatsApp\").",
-    'Reply with JSON only: {"title": "...", "scenes": [{"voiceover": "...", "on_screen": "...", "image_prompt": "..."}], "cta": "..."}',
+    'Reply with JSON only: {"title": "...", "scenes": [{"voiceover": "...", "on_screen": "...", "image_prompt": "...", "shot": null}], "cta": "..."}',
   ].join("\n");
 }
 
 /** Post -> reel script (scenes with voiceover, on-screen text and image prompts). */
-export async function writeReelScript(campaign: Campaign, brand: Brand, post: Post): Promise<ReelScript> {
-  return (await writeReelScriptWithProvider(campaign, brand, post)).script;
+export async function writeReelScript(campaign: Campaign, brand: Brand, post: Post, shots: string[] = []): Promise<ReelScript> {
+  return (await writeReelScriptWithProvider(campaign, brand, post, shots)).script;
 }
 
 /** Same as writeReelScript, plus which text provider wrote it (to label demo output). */
-export async function writeReelScriptWithProvider(campaign: Campaign, brand: Brand, post: Post): Promise<{ script: ReelScript; provider: string }> {
+export async function writeReelScriptWithProvider(campaign: Campaign, brand: Brand, post: Post, shots: string[] = []): Promise<{ script: ReelScript; provider: string }> {
   const out = await generateText(
     { workspaceId: post.workspaceId, brandId: brand.id, purpose: "reel_script", subject: { type: "post", id: post.id } },
-    { system: brandSystemPrompt(brand), prompt: reelPrompt(campaign, post), json: true, temperature: 0.8 },
+    { system: brandSystemPrompt(brand), prompt: reelPrompt(campaign, post, shots), json: true, temperature: 0.8 },
   );
   const s = schema.parse(parseJsonObject(out.text));
   const script: ReelScript = {
@@ -61,6 +70,7 @@ export async function writeReelScriptWithProvider(campaign: Campaign, brand: Bra
       voiceover: sc.voiceover.trim(),
       onScreen: sc.on_screen.trim().slice(0, 60),
       imagePrompt: sc.image_prompt.trim(),
+      ...(sc.shot && sc.shot >= 1 && sc.shot <= shots.length ? { shot: sc.shot } : {}),
     })),
     cta: (s.cta || post.posterCta || "Order now").slice(0, 40),
   };

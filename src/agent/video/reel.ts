@@ -11,9 +11,12 @@ import { generateImage } from "../images/router";
 import { QuotaExceededError } from "../router";
 import { imagePrompt, siteLabel } from "../style";
 import { renderSceneFrame, REEL_H, REEL_W } from "./frames";
+import { endCardFrame, productShotBackground } from "./cards";
+import { composePoster } from "../images/poster";
+import { creativeSpec } from "@/lib/formats";
 import { ffmpeg, tempDir, wavDurationSec } from "./ffmpeg";
 import { writeReelScriptWithProvider } from "./script";
-import { isDemoProvider, recordPostVersion, setDemoPart } from "@/lib/data";
+import { isDemoProvider, listProductShots, recordPostVersion, setDemoPart } from "@/lib/data";
 import { speak } from "./voice";
 import { mapLimit, parallelism } from "@/lib/concurrency";
 
@@ -72,8 +75,12 @@ export async function buildReelVideo(input: {
   brand: Brand;
   postId: number;
   script: ReelScript;
-}): Promise<{ mp4: Buffer; durationSec: number; voiceProvider: string; demoImages: boolean }> {
+  /** Product screenshots (in order) that scenes can show instead of an AI photo. */
+  shots?: Buffer[];
+}): Promise<{ mp4: Buffer; durationSec: number; voiceProvider: string; demoImages: boolean; cover: Buffer | null }> {
   const { workspaceId, brand, postId, script } = input;
+  const shots = input.shots ?? [];
+  let firstBackground: Buffer | null = null;
   const dir = await tempDir();
   const logo = brand.logoKey ? await getFile(brand.logoKey) : null;
   const db = await getDb();
@@ -85,8 +92,11 @@ export async function buildReelVideo(input: {
     const sceneResults = await mapLimit(script.scenes, parallelism().image, async (scene, i) => {
       const last = i === script.scenes.length - 1;
 
-      // 2. image
-      const img = await generateImage(
+      // 2. image: the product screenshot in a phone (free, real) or an AI photo.
+      const shot = scene.shot ? shots[scene.shot - 1] : undefined;
+      const img = shot
+        ? { data: await productShotBackground(shot, brand.colors), mime: "image/png", provider: "product_shot" }
+        : await generateImage(
         { workspaceId, brandId: brand.id, purpose: "reel_scene", subject: { type: "post", id: postId } },
         {
           prompt: `${imagePrompt(brand, scene.imagePrompt || scene.onScreen, "band")}. Vertical 9:16 photo`,
@@ -96,6 +106,7 @@ export async function buildReelVideo(input: {
           seed: postId * 10 + i,
         },
       );
+      if (i === 0) firstBackground = img.data;
       const sceneKey = newKey(workspaceId, "scene", img.mime);
       await putFile(sceneKey, img.data, img.mime);
       await db.insert(schema.assets).values({
@@ -164,6 +175,26 @@ export async function buildReelVideo(input: {
     const failed = sceneResults.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
     if (failed) throw failed.reason;
     const done = sceneResults.map((r) => (r as PromiseFulfilledResult<{ clip: string; dur: number }>).value);
+
+    // End card: logo, name, CTA and website for the last 2.5 seconds (no AI, always on-brand).
+    const endDur = 2.5;
+    const endPng = path.join(dir, "end.png");
+    await fs.writeFile(
+      endPng,
+      await endCardFrame({ brandName: brand.name, colors: brand.colors, logo, cta: script.cta, website: siteLabel(brand.website), fonts: brandFonts(brand.fonts) }),
+    );
+    const endClip = path.join(dir, "end.mp4");
+    await ffmpeg([
+      "-loop", "1", "-framerate", String(FPS), "-i", endPng,
+      "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+      "-filter_complex", `[0:v]scale=${REEL_W}:${REEL_H},fade=t=in:st=0:d=0.3,format=yuv420p[v]`,
+      "-map", "[v]", "-map", "1:a",
+      "-frames:v", String(Math.ceil(endDur * FPS)), "-t", String(endDur),
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-r", String(FPS),
+      "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+      endClip,
+    ]);
+    done.push({ clip: endClip, dur: endDur });
     const parts = done.map((d) => d.clip);
     const total = done.reduce((a, d) => a + d.dur, 0);
 
@@ -185,7 +216,25 @@ export async function buildReelVideo(input: {
       "-movflags", "+faststart",
       out,
     ]);
-    return { mp4: await fs.readFile(out), durationSec: total, voiceProvider, demoImages };
+    // Cover (thumbnail): the first scene's picture with the hook as a headline.
+    let cover: Buffer | null = null;
+    if (firstBackground) {
+      const spec = creativeSpec("instagram", "reel");
+      cover = await composePoster({
+        background: firstBackground,
+        width: REEL_W,
+        height: REEL_H,
+        template: "top",
+        headline: script.scenes[0]?.onScreen || script.title,
+        brandName: brand.name,
+        colors: brand.colors,
+        fonts: brandFonts(brand.fonts),
+        logo,
+        footer: [brand.name, siteLabel(brand.website)].filter(Boolean).join(" · "),
+        safe: spec.safe,
+      });
+    }
+    return { mp4: await fs.readFile(out), durationSec: total, voiceProvider, demoImages, cover };
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
@@ -201,13 +250,25 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
   const db = await getDb();
   const started = Date.now();
 
-  const { script, provider: scriptProvider } = await writeReelScriptWithProvider(campaign, brand, post);
+  const shotRows = await listProductShots(post.workspaceId, brand.id);
+  const shotLabels = shotRows.map((s) => s.prompt || "app screen");
+  const { script, provider: scriptProvider } = await writeReelScriptWithProvider(campaign, brand, post, shotLabels);
   await db
     .update(schema.posts)
     .set({ reelScript: script })
     .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
 
-  const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script });
+  const shotFiles = (await Promise.all(shotRows.map((s) => getFile(s.storageKey)))).filter((b): b is Buffer => Boolean(b));
+  const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script, shots: shotFiles.length === shotRows.length ? shotFiles : [] });
+  let coverKey: string | undefined;
+  if (video.cover) {
+    coverKey = newKey(post.workspaceId, "cover", "image/png");
+    await putFile(coverKey, video.cover, "image/png");
+    await db.insert(schema.assets).values({
+      workspaceId: post.workspaceId, brandId: brand.id, postId: post.id, kind: "cover", storageKey: coverKey, mime: "image/png",
+      width: REEL_W, height: REEL_H, bytes: video.cover.length, provider: "composer", demo: video.demoImages,
+    });
+  }
   const demoVideo = video.demoImages || isDemoProvider(scriptProvider);
   const key = newKey(post.workspaceId, "video", "video/mp4");
   await putFile(key, video.mp4, "video/mp4");
@@ -244,7 +305,7 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
   });
   await db
     .update(schema.posts)
-    .set({ reelStatus: "done", reelError: null, reelScript: { ...script, voice: video.voiceProvider, durationSec: Math.round(video.durationSec) } })
+    .set({ reelStatus: "done", reelError: null, reelScript: { ...script, voice: video.voiceProvider, durationSec: Math.round(video.durationSec), coverKey } })
     .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
   await setDemoPart(post.workspaceId, post.id, "video", demoVideo);
   // New video = new version; an approved post goes back to review.

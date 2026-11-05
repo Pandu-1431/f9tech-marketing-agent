@@ -12,9 +12,11 @@ type Props = {
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
   submitLabel: string;
   timeZones?: string[];
+  /** Product screenshots already saved (edit page only). */
+  shots?: { id: number; url: string; label: string }[];
 };
 
-export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["Asia/Kolkata"] }: Props) {
+export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["Asia/Kolkata"], shots = [] }: Props) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
   const join = (v?: string[] | null) => (v ?? []).join(", ");
   const hex = (v: string | undefined, fallback: string) => (v && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback);
@@ -164,6 +166,27 @@ export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["A
         <div>
           <label className="label" htmlFor="donts">Don&apos;t</label>
           <textarea className="input" id="donts" name="donts" rows={2} defaultValue={brand?.donts ?? ""} placeholder="No competitor names, no health claims" />
+        </div>
+        <div className="md:col-span-2">
+          <span className="label">App or website screenshots (for reels)</span>
+          {shots.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-3">
+              {shots.map((s, i) => (
+                <label key={s.id} className="w-24 text-center text-xs text-zinc-600">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={s.url} alt={s.label} className="mb-1 h-40 w-24 rounded-lg border border-zinc-200 object-cover object-top" />
+                  <span className="block truncate">{i + 1}. {s.label}</span>
+                  <span className="flex items-center justify-center gap-1">
+                    <input type="checkbox" name="removeShot" value={s.id} /> remove
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+          <input id="shots" name="shots" type="file" multiple accept="image/png,image/jpeg,image/webp" className="text-sm" />
+          <p className="hint">
+            Up to 8 phone screenshots (PNG/JPG, max 3 MB each). Name the files by what they show, e.g. &quot;daily-plan.png&quot;, &quot;past-questions.png&quot;. Reels show them in a phone, so people see the real product.
+          </p>
         </div>
         <fieldset className="md:col-span-2">
           <legend className="label">Platforms this business uses</legend>

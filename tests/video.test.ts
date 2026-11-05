@@ -3,7 +3,12 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createBrand, createCampaign, latestVideos, listCampaignPosts } from "@/lib/data";
+import { createBrand, createCampaign, latestVideos, listCampaignPosts, listProductShots } from "@/lib/data";
+import sharp from "sharp";
+import { getDb, schema } from "@/db";
+import { newKey, putFile } from "@/lib/storage";
+import { shotLabel } from "@/lib/shots";
+import { endCardFrame, productShotBackground } from "@/agent/video/cards";
 import { enqueue, processJobs } from "@/jobs/queue";
 import { getFile } from "@/lib/storage";
 import { ffmpegPath } from "@/lib/config";
@@ -64,5 +69,41 @@ describe("video studio pipeline", () => {
       expect(info.audio).toBe(true);
       expect(info.seconds).toBeGreaterThan(8);
     }
+  });
+
+  it("shows product screenshots in a phone, ends on a logo card, and saves a cover", async () => {
+    const { ws } = await makeWorkspace("Chakravyuh");
+    const brand = await createBrand(ws.id, { name: "Chakravyuh", website: "https://chakravyuh.upsc.guru", colors: ["#3730a3", "#f59e0b"] });
+    const shot = await sharp({ create: { width: 540, height: 1170, channels: 3, background: "#eef2ff" } }).png().toBuffer();
+    const key = newKey(ws.id, "shot", "image/png");
+    await putFile(key, shot, "image/png");
+    const db = await getDb();
+    await db.insert(schema.assets).values({ workspaceId: ws.id, brandId: brand.id, kind: "product_shot", storageKey: key, mime: "image/png", prompt: "daily plan" });
+    expect(await listProductShots(ws.id, brand.id)).toHaveLength(1);
+
+    const campaign = await createCampaign(ws.id, {
+      brandId: brand.id, theme: "Prelims countdown", platforms: ["instagram"], startDate: "2026-11-01", endDate: "2026-11-07", postsPerWeek: 3,
+    });
+    await enqueue("campaign.plan", { workspaceId: ws.id, campaignId: campaign.id }, ws.id);
+    await processJobs(100);
+    const reels = (await listCampaignPosts(ws.id, campaign.id)).filter((p) => p.format === "reel");
+    expect(reels.length).toBeGreaterThan(0);
+    for (const post of reels) {
+      expect(post.reelStatus).toBe("done");
+      expect(post.reelScript?.scenes.some((sc) => sc.shot === 1)).toBe(true); // the writer used the screenshot
+      const cover = await getFile(post.reelScript!.coverKey!);
+      expect((await sharp(cover!).metadata()).height).toBe(1920);
+    }
+  });
+});
+
+describe("reel cards", () => {
+  it("draws the phone mockup and the end card at reel size", async () => {
+    const shot = await sharp({ create: { width: 400, height: 860, channels: 3, background: "#ffffff" } }).png().toBuffer();
+    const bg = await productShotBackground(shot, ["#3730a3", "#f59e0b"]);
+    expect(await sharp(bg).metadata()).toMatchObject({ width: 1080, height: 1920 });
+    const end = await endCardFrame({ brandName: "Chakravyuh", colors: ["#3730a3"], cta: "Open the free app", website: "chakravyuh.upsc.guru" });
+    expect(await sharp(end).metadata()).toMatchObject({ width: 1080, height: 1920 });
+    expect(shotLabel("daily-plan_screen.PNG")).toBe("daily plan screen");
   });
 });

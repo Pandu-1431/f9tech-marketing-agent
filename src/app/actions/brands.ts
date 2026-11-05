@@ -8,11 +8,12 @@ const KNOWN_FONTS = new Set(FONT_CHOICES.map((f) => f.family));
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireEditor } from "@/lib/auth";
-import { createBrand, deleteBrand, LimitError, setBrandLogo, updateBrand } from "@/lib/data";
+import { createBrand, deleteBrand, deleteProductShots, LimitError, listProductShots, MAX_PRODUCT_SHOTS, setBrandLogo, updateBrand } from "@/lib/data";
 import { getDb, schema } from "@/db";
 import { newKey, putFile } from "@/lib/storage";
 import sharp from "sharp";
 import type { FormState } from "./auth";
+import { shotLabel } from "@/lib/shots";
 
 const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 
@@ -32,6 +33,41 @@ async function saveLogo(workspaceId: number, brandId: number, file: FormDataEntr
   const db = await getDb();
   await db.insert(schema.assets).values({ workspaceId, brandId, kind: "logo", storageKey: key, mime: "image/png", bytes: png.length, provider: "upload" });
   await setBrandLogo(workspaceId, brandId, key);
+  return null;
+}
+
+/** Save new product screenshots (max 8 per brand, 3 MB each) and remove the ticked ones. */
+async function saveShots(workspaceId: number, brandId: number, formData: FormData): Promise<string | null> {
+  const remove = formData.getAll("removeShot").map(Number).filter(Number.isFinite);
+  await deleteProductShots(workspaceId, brandId, remove);
+  const files = formData.getAll("shots").filter((f): f is File => f instanceof File && f.size > 0);
+  if (!files.length) return null;
+  const room = MAX_PRODUCT_SHOTS - (await listProductShots(workspaceId, brandId)).length;
+  if (room <= 0) return `You already have ${MAX_PRODUCT_SHOTS} screenshots. Remove some first.`;
+  const db = await getDb();
+  let skipped = 0;
+  for (const file of files.slice(0, room)) {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024) {
+      skipped++;
+      continue;
+    }
+    let png: Buffer;
+    try {
+      png = await sharp(Buffer.from(await file.arrayBuffer())).resize(1080, 2400, { fit: "inside", withoutEnlargement: true }).png().toBuffer();
+    } catch {
+      skipped++;
+      continue;
+    }
+    const meta = await sharp(png).metadata();
+    const key = newKey(workspaceId, "shot", "image/png");
+    await putFile(key, png, "image/png");
+    await db.insert(schema.assets).values({
+      workspaceId, brandId, kind: "product_shot", storageKey: key, mime: "image/png",
+      width: meta.width, height: meta.height, bytes: png.length, prompt: shotLabel(file.name), provider: "upload",
+    });
+  }
+  const over = Math.max(0, files.length - room);
+  if (skipped || over) return `${skipped + over} screenshot(s) were not added (PNG/JPG/WEBP under 3 MB, max ${MAX_PRODUCT_SHOTS} in total).`;
   return null;
 }
 
@@ -116,7 +152,7 @@ export async function createBrandAction(_prev: FormState, formData: FormData): P
   if ("error" in input) return { error: input.error };
   try {
     const brand = await createBrand(workspace.id, input.data);
-    const logoError = await saveLogo(workspace.id, brand.id, formData.get("logo"));
+    const logoError = (await saveLogo(workspace.id, brand.id, formData.get("logo"))) ?? (await saveShots(workspace.id, brand.id, formData));
     if (logoError) return { error: `Saved, but: ${logoError}` };
   } catch (err) {
     if (err instanceof LimitError) return { error: err.message };
@@ -132,7 +168,7 @@ export async function updateBrandAction(id: number, _prev: FormState, formData: 
   if ("error" in input) return { error: input.error };
   const row = await updateBrand(workspace.id, id, input.data);
   if (!row) return { error: "Brand not found" };
-  const logoError = await saveLogo(workspace.id, id, formData.get("logo"));
+  const logoError = (await saveLogo(workspace.id, id, formData.get("logo"))) ?? (await saveShots(workspace.id, id, formData));
   if (logoError) return { error: logoError };
   revalidatePath("/brands");
   redirect("/brands");

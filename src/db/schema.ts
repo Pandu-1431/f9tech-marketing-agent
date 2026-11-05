@@ -20,8 +20,8 @@ import {
  */
 
 export type QcIssue = { code: string; level: "fail" | "warn"; message: string; fix?: "rewrite" | "hashtags" };
-export type ReelScene = { voiceover: string; onScreen: string; imagePrompt: string };
-export type ReelScript = { title: string; scenes: ReelScene[]; cta: string; voice?: string; durationSec?: number };
+export type ReelScene = { voiceover: string; onScreen: string; imagePrompt: string; /** 1-based product shot to show instead of an AI image. */ shot?: number };
+export type ReelScript = { title: string; scenes: ReelScene[]; cta: string; voice?: string; durationSec?: number; /** Cover image (thumbnail) for the reel. */ coverKey?: string };
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -322,7 +322,7 @@ export const assets = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     brandId: integer("brand_id").references(() => brands.id, { onDelete: "cascade" }),
     postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
-    kind: varchar("kind", { length: 20 }).notNull(), // logo | background | poster | video | audio | upload
+    kind: varchar("kind", { length: 20 }).notNull(), // logo | background | poster | video | audio | upload | product_shot | cover
     storageKey: text("storage_key").notNull(),
     mime: varchar("mime", { length: 60 }).notNull(),
     width: integer("width"),
