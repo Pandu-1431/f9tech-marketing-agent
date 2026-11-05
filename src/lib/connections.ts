@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { buildProvider } from "@/agent/router";
+import { buildProvider, textProviderRest } from "@/agent/router";
 import { providerRequestsToday } from "@/agent/router";
-import { buildImageProvider } from "@/agent/images/router";
+import { buildImageProvider, fullImageChain } from "@/agent/images/router";
+import { imageProviderRest } from "@/agent/images/limits";
 import { buildVoiceProvider } from "@/agent/video/voice";
 import { toWav, wavDurationSec } from "@/agent/video/ffmpeg";
 import {
   ffmpegPath,
-  imageChain,
   imageProviderConfig,
   providerConfig,
   textChain,
@@ -20,15 +20,17 @@ export type Task = "text" | "image" | "voice";
 /** Where to get each key and which .env.local variables it needs. */
 export const PROVIDER_HELP: Record<string, { label: string; free: string; url?: string; env: string[] }> = {
   "text:gemini": { label: "Google Gemini", free: "Free tier (daily request limit)", url: "https://aistudio.google.com/apikey", env: ["GEMINI_API_KEY"] },
-  "text:groq": { label: "Groq (Llama 3.3 70B)", free: "Free tier", url: "https://console.groq.com/keys", env: ["GROQ_API_KEY"] },
+  "text:groq": { label: "Groq (GPT-OSS 120B)", free: "Free tier", url: "https://console.groq.com/keys", env: ["GROQ_API_KEY"] },
   "text:openrouter": { label: "OpenRouter (free models)", free: "Free models", url: "https://openrouter.ai/keys", env: ["OPENROUTER_API_KEY"] },
   "text:local": { label: "Local model (Ollama)", free: "Free, runs on your Mac", url: "https://ollama.com", env: ["LOCAL_LLM_BASE_URL", "LOCAL_LLM_MODEL"] },
   "text:fake": { label: "Demo writer", free: "Built in, sample text only", env: [] },
   "image:cloudflare": { label: "Cloudflare Workers AI (FLUX)", free: "Free daily allowance", url: "https://dash.cloudflare.com/?to=/:account/ai/workers-ai", env: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
   "image:huggingface": { label: "Hugging Face (FLUX)", free: "Free monthly credits", url: "https://huggingface.co/settings/tokens", env: ["HF_TOKEN"] },
   "image:pollinations": { label: "Pollinations", free: "Free, no key (test use)", env: [] },
+  "image:brand_art": { label: "Brand art (built in)", free: "Free, unlimited: designed on-brand backgrounds when the image AIs are out", env: [] },
   "image:fake": { label: "Demo backgrounds", free: "Built in, colour gradients", env: [] },
   "voice:cloudflare": { label: "Cloudflare MeloTTS", free: "Same Cloudflare key as images", url: "https://dash.cloudflare.com/?to=/:account/ai/workers-ai", env: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
+  "voice:groq": { label: "Groq Orpheus voice", free: "Free tier, same Groq key (accept the model terms once)", url: "https://console.groq.com/playground?model=canopylabs/orpheus-v1-english", env: ["GROQ_API_KEY"] },
   "voice:piper": { label: "Piper (offline voice)", free: "Free, runs on your server", url: "https://github.com/rhasspy/piper", env: ["PIPER_MODEL"] },
   "voice:silent": { label: "No voice", free: "Music + subtitles only", env: [] },
 };
@@ -45,6 +47,9 @@ export type ConnectionRow = {
   usedToday: number;
   dailyLimit: number;
   order: number;
+  /** When a resting provider can be used again (ms since epoch), and why. */
+  restUntil: number | null;
+  restReason: string | null;
 };
 
 export async function connectionRows(): Promise<ConnectionRow[]> {
@@ -72,11 +77,12 @@ export async function connectionRows(): Promise<ConnectionRow[]> {
         configured = buildVoiceProvider(name) !== null;
       }
       const usedToday = await providerRequestsToday(task === "text" ? name : `${task}:${name}`);
-      rows.push({ task, name, ...help, model, configured, usedToday, dailyLimit, order });
+      const rest = task === "text" ? (textProviderRest(name) ? { until: textProviderRest(name)!, reason: "busy or out of free quota, trying again soon" } : null) : imageProviderRest(name);
+      rows.push({ task, name, ...help, model, configured, usedToday, dailyLimit, order, restUntil: rest?.until ?? null, restReason: rest?.reason ?? null });
     }
   };
   await add("text", textChain());
-  await add("image", imageChain());
+  await add("image", fullImageChain());
   await add("voice", voiceChain());
   return rows;
 }

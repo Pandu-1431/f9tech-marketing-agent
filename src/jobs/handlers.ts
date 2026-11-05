@@ -186,14 +186,19 @@ const designCampaignJob: Handler = async (payload) => {
     }
   });
   if (stop) return;
-  if (failures > 0) throw new Error(`${failures} poster(s) could not be made yet`);
 
-  // Posts planned as reels get a video automatically.
+  // Posts planned as reels get a video automatically — even when another post's poster failed
+  // (one failed poster used to block every video in the campaign).
   const { enqueue } = await import("./queue");
-  for (const post of todo.filter((p) => p.format === "reel" && p.reelStatus === "none" && p.status !== "idea")) {
+  const fresh = await db
+    .select()
+    .from(schema.posts)
+    .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId)));
+  for (const post of fresh.filter((p) => p.format === "reel" && p.reelStatus === "none" && p.status !== "idea")) {
     await updatePost(workspaceId, post.id, { reelStatus: "making" });
     await enqueue("post.reel", { workspaceId, postId: post.id }, workspaceId);
   }
+  if (failures > 0) throw new Error(`${failures} poster(s) could not be made yet`);
 };
 
 /** Video Studio: make (or remake) the reel video for one post. */

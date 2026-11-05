@@ -261,3 +261,22 @@ export async function approveAllPassedAction(campaignId: number) {
   }
   revalidatePath(`/campaigns/${campaignId}`);
 }
+
+/** One click: make every poster and reel video that is missing or failed in this campaign. */
+export async function finishMissingMediaAction(campaignId: number) {
+  const { workspace } = await requireEditor();
+  const posts = await listCampaignPosts(workspace.id, campaignId);
+  for (const post of posts) {
+    if (post.status === "idea" || post.status === "published" || post.status === "rejected") continue;
+    if (post.designStatus === "failed" || post.designStatus === "none") {
+      await updatePost(workspace.id, post.id, { designStatus: "designing", lastError: null });
+      await enqueue("post.design", { workspaceId: workspace.id, postId: post.id }, workspace.id);
+    }
+    if (post.format === "reel" && (post.reelStatus === "none" || post.reelStatus === "failed")) {
+      await updatePost(workspace.id, post.id, { reelStatus: "making", reelError: null });
+      await enqueue("post.reel", { workspaceId: workspace.id, postId: post.id }, workspace.id);
+    }
+  }
+  kickJobs();
+  revalidatePath(`/campaigns/${campaignId}`);
+}

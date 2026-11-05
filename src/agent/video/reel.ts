@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { brandFonts } from "@/lib/fonts";
 import path from "node:path";
-import { and, count, eq, gte } from "drizzle-orm";
+import { and, count, desc, eq, gte } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import type { Brand, Campaign, Post, ReelScript } from "@/db/schema";
 import { freePlan } from "@/lib/config";
@@ -77,6 +77,8 @@ export async function buildReelVideo(input: {
   script: ReelScript;
   /** Product screenshots (in order) that scenes can show instead of an AI photo. */
   shots?: Buffer[];
+  /** Used when every image AI is out of its free limit: the post's own poster photo and the app screenshots. */
+  fallbacks?: { kind: "photo" | "shot"; data: Buffer; mime: string; provider: string }[];
 }): Promise<{ mp4: Buffer; durationSec: number; voiceProvider: string; demoImages: boolean; cover: Buffer | null }> {
   const { workspaceId, brand, postId, script } = input;
   const shots = input.shots ?? [];
@@ -94,7 +96,7 @@ export async function buildReelVideo(input: {
 
       // 2. image: the product screenshot in a phone (free, real) or an AI photo.
       const shot = scene.shot ? shots[scene.shot - 1] : undefined;
-      const img = shot
+      let img = shot
         ? { data: await productShotBackground(shot, brand.colors), mime: "image/png", provider: "product_shot" }
         : await generateImage(
         { workspaceId, brandId: brand.id, purpose: "reel_scene", subject: { type: "post", id: postId } },
@@ -106,6 +108,13 @@ export async function buildReelVideo(input: {
           seed: postId * 10 + i,
         },
       );
+      // Every image AI out for today: prefer real material (the post's AI photo, the app screenshots) over brand art.
+      if (img.provider === "brand_art" && input.fallbacks?.length) {
+        const pick = input.fallbacks[i % input.fallbacks.length];
+        img = pick.kind === "shot"
+          ? { data: await productShotBackground(pick.data, brand.colors), mime: "image/png", provider: "product_shot" }
+          : { data: pick.data, mime: pick.mime, provider: pick.provider };
+      }
       if (i === 0) firstBackground = img.data;
       const sceneKey = newKey(workspaceId, "scene", img.mime);
       await putFile(sceneKey, img.data, img.mime);
@@ -259,7 +268,18 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
     .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
 
   const shotFiles = (await Promise.all(shotRows.map((s) => getFile(s.storageKey)))).filter((b): b is Buffer => Boolean(b));
-  const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script, shots: shotFiles.length === shotRows.length ? shotFiles : [] });
+  // Real material to fall back on when the image AIs are out for the day.
+  const [bg] = await db
+    .select()
+    .from(schema.assets)
+    .where(and(eq(schema.assets.workspaceId, post.workspaceId), eq(schema.assets.postId, post.id), eq(schema.assets.kind, "background"), eq(schema.assets.demo, false)))
+    .orderBy(desc(schema.assets.id))
+    .limit(1);
+  const fallbacks: { kind: "photo" | "shot"; data: Buffer; mime: string; provider: string }[] = [];
+  const bgFile = bg && bg.provider !== "brand_art" ? await getFile(bg.storageKey) : null;
+  if (bgFile && bg) fallbacks.push({ kind: "photo", data: bgFile, mime: bg.mime, provider: bg.provider ?? "image" });
+  for (const f of shotFiles) fallbacks.push({ kind: "shot", data: f, mime: "image/png", provider: "product_shot" });
+  const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script, shots: shotFiles.length === shotRows.length ? shotFiles : [], fallbacks });
   let coverKey: string | undefined;
   if (video.cover) {
     coverKey = newKey(post.workspaceId, "cover", "image/png");

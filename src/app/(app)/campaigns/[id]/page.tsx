@@ -10,6 +10,7 @@ import {
   reviewPostAction,
   rewritePostAction,
   approveAllPassedAction,
+  finishMissingMediaAction,
 } from "@/app/actions/campaigns";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { campaignPublications, listChannels } from "@/agent/publish";
@@ -28,6 +29,39 @@ import { allowedFormats } from "@/agent/planner";
 import { campaignTypeLabel, FORMAT_LABELS } from "@/lib/campaign-types";
 
 import { TEMPLATE_INFO } from "@/agent/images/poster-info";
+import { Pipeline, type StepState } from "@/components/ui/pipeline";
+
+/** Where this campaign is in the AI team's line: plan → write → design → (reels) → check → approve → publish. */
+function CampaignPipeline({ campaign, posts }: { campaign: Campaign; posts: Post[] }) {
+  const real = posts.filter((p) => p.status !== "idea" && p.status !== "rejected");
+  const all = (f: (p: Post) => boolean) => real.length > 0 && real.every(f);
+  const some = (f: (p: Post) => boolean) => real.some(f);
+  const planned = posts.length > 0;
+  const written = planned && posts.every((p) => p.status !== "idea");
+  const designed = all((p) => p.designStatus === "done");
+  const reels = real.filter((p) => p.format === "reel");
+  const reelsDone = reels.every((p) => p.reelStatus === "done");
+  const checked = all((p) => p.qcStatus !== "none");
+  const approved = all((p) => p.status === "approved" || p.status === "published");
+  const published = all((p) => p.status === "published");
+  const state = (done: boolean, started: boolean): StepState => (done ? "done" : started ? "active" : "todo");
+  const steps: { label: string; icon: string; state: StepState; note?: string }[] = [
+    { label: "Plan", icon: "🧭", state: state(planned, campaign.status === "planning" || campaign.status === "draft") },
+    { label: "Write", icon: "✍️", state: state(written, planned), note: planned ? `${posts.filter((p) => p.status !== "idea").length}/${posts.length}` : undefined },
+    { label: "Design", icon: "🎨", state: state(designed, written), note: real.length ? `${real.filter((p) => p.designStatus === "done").length}/${real.length}` : undefined },
+    ...(reels.length
+      ? [{ label: "Reels", icon: "🎬", state: state(reelsDone, designed || some((p) => p.reelStatus === "making")), note: `${reels.filter((p) => p.reelStatus === "done").length}/${reels.length}` }]
+      : []),
+    { label: "Check", icon: "🛡️", state: state(checked, some((p) => p.qcStatus !== "none")) },
+    { label: "Approve", icon: "👍", state: state(approved, checked), note: real.length ? `${real.filter((p) => p.status === "approved" || p.status === "published").length}/${real.length}` : undefined },
+    { label: "Publish", icon: "🚀", state: state(published, approved || some((p) => p.status === "published")) },
+  ];
+  return (
+    <div className="card overflow-x-auto">
+      <Pipeline steps={steps} />
+    </div>
+  );
+}
 const TEMPLATE_LABELS: Record<string, string> = Object.fromEntries(Object.entries(TEMPLATE_INFO).map(([id, t]) => [id, t.label]));
 
 export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
@@ -113,8 +147,23 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           {problem.error.slice(0, 300)}
         </p>
       )}
+      <CampaignPipeline campaign={campaign} posts={posts} />
+      {(() => {
+        const live = posts.filter((p) => p.status !== "idea" && p.status !== "published" && p.status !== "rejected");
+        const missing = live.filter((p) => p.designStatus === "failed" || (p.format === "reel" && (p.reelStatus === "failed" || (p.reelStatus === "none" && p.designStatus === "done")))).length;
+        return canEdit && missing > 0 && !working ? (
+          <form action={finishMissingMediaAction.bind(null, campaign.id)} className="flex flex-wrap items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-sm" data-testid="finish-missing">
+            <span className="flex-1 text-indigo-900">
+              {missing} poster{missing === 1 ? "" : "s"} or video{missing === 1 ? "" : "s"} still missing. The team now waits for free AI limits and falls back to brand art, so this will work.
+            </span>
+            <button className="btn">Make the missing ones</button>
+          </form>
+        ) : null;
+      })()}
       {working && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="relative overflow-hidden rounded-xl border border-fuchsia-200 bg-gradient-to-r from-indigo-50 via-fuchsia-50 to-amber-50 px-3 py-2 text-sm text-indigo-900">
+          <span className="shimmer pointer-events-none absolute inset-0" />
+          <span className="live-dot mr-2 align-middle" />
           The agent is working
           {!posts.length
             ? ": planning the calendar"

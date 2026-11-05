@@ -4,6 +4,7 @@ import { httpTimeoutMs, voiceChain, voiceProviderConfig, type VoiceProviderConfi
 import { ProviderError } from "../providers/types";
 import { AllProvidersFailedError, bumpProvider, providerRequestsToday } from "../router";
 import { toWav, wavDurationSec, silentWav } from "./ffmpeg";
+import { classifyLimit, imageProviderRest, nextUtcMidnight, restImageProvider } from "../images/limits";
 
 /*
  * Voice router: turns a line of voiceover into a WAV file.
@@ -40,6 +41,58 @@ class CloudflareVoice implements VoiceProvider {
     const b64 = json.result?.audio ?? json.audio;
     if (!b64) throw new ProviderError("cloudflare voice: no audio in response");
     return Buffer.from(b64, "base64");
+  }
+}
+
+/** PCM samples of a 16-bit WAV (the "data" chunk). */
+function wavPcm(wav: Buffer): Buffer {
+  let offset = 12;
+  while (offset + 8 <= wav.length) {
+    const id = wav.toString("ascii", offset, offset + 4);
+    const size = wav.readUInt32LE(offset + 4);
+    if (id === "data") return wav.subarray(offset + 8, Math.min(wav.length, offset + 8 + size));
+    offset += 8 + size;
+  }
+  return Buffer.alloc(0);
+}
+
+/** Splits text into pieces of at most `max` characters, at sentence or word breaks. */
+export function voiceChunks(text: string, max = 190): string[] {
+  const out: string[] = [];
+  let cur = "";
+  for (const word of text.trim().split(/\s+/)) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (next.length > max && cur) {
+      out.push(cur);
+      cur = word;
+    } else cur = next;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/** Groq Orpheus (OpenAI-style /audio/speech). Short requests only, so long lines are split and joined. */
+class GroqVoice implements VoiceProvider {
+  readonly name: string;
+  readonly model: string;
+  constructor(private cfg: VoiceProviderConfig) {
+    this.name = cfg.name;
+    this.model = cfg.model;
+  }
+  async speak(text: string): Promise<Buffer> {
+    if (!this.cfg.apiKey) throw new ProviderError("groq voice: missing GROQ_API_KEY");
+    const parts: Buffer[] = [];
+    for (const piece of voiceChunks(text)) {
+      const res = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+        method: "POST",
+        headers: { authorization: `Bearer ${this.cfg.apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: this.model, input: piece, voice: this.cfg.command || "hannah", response_format: "wav" }),
+        signal: AbortSignal.timeout(httpTimeoutMs()),
+      });
+      if (!res.ok) throw new ProviderError(`groq voice HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`, res.status);
+      parts.push(wavPcm(await toWav(Buffer.from(await res.arrayBuffer()))));
+    }
+    return rawToWav(Buffer.concat(parts), 24000);
   }
 }
 
@@ -122,6 +175,7 @@ export function buildVoiceProvider(name: string): VoiceProvider | null {
   const cfg = voiceProviderConfig(name);
   if (!cfg) return null;
   if (cfg.driver === "cloudflare") return cfg.apiKey && cfg.accountId ? new CloudflareVoice(cfg) : null;
+  if (cfg.driver === "groq") return cfg.apiKey ? new GroqVoice(cfg) : null;
   if (cfg.driver === "piper") return cfg.model ? new PiperVoice(cfg) : null;
   return new SilentVoice();
 }
@@ -134,6 +188,12 @@ export async function speak(ctx: { workspaceId: number; brandId?: number | null;
     const cfg = voiceProviderConfig(name);
     if (!provider) {
       errors.push(`${name}: not configured`);
+      continue;
+    }
+    // Cloudflare voice and images share one daily allowance: if images found it used up, skip.
+    const rest = imageProviderRest(name);
+    if (rest && name === "cloudflare") {
+      errors.push(`${name}: ${rest.reason}`);
       continue;
     }
     if ((await providerRequestsToday(`voice:${name}`)) >= (cfg?.dailyLimit ?? 1_000_000)) {
@@ -163,6 +223,9 @@ export async function speak(ctx: { workspaceId: number; brandId?: number | null;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(message);
+      if (name === "cloudflare" && classifyLimit(err instanceof ProviderError ? err.status : undefined, message)?.kind === "daily") {
+        restImageProvider("cloudflare", nextUtcMidnight(), "free daily limit used up (back at 05:30 IST)");
+      }
       await db.insert(schema.generations).values({
         workspaceId: ctx.workspaceId,
         brandId: ctx.brandId ?? null,

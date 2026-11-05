@@ -105,7 +105,9 @@ export async function bumpProvider(provider: string): Promise<void> {
  * so the next requests go straight to the backup instead of waiting for it to fail again.
  * If every provider is resting, they are still tried (best effort), resting ones last.
  */
-const restingUntil = new Map<string, number>();
+const gr = globalThis as unknown as { __textRest?: Map<string, number> };
+const restingUntil = (gr.__textRest ??= new Map<string, number>());
+const isDailyError = (message: string) => /per ?day|daily|PerDay|tokens per day|\bTPD\b|\bRPD\b/i.test(message);
 const cooldownMs = () => Math.max(0, Number(process.env.AGENT_PROVIDER_COOLDOWN_SEC ?? 300)) * 1000;
 const isBusyError = (message: string) => /\b(429|503|500|502|504)\b|busy|high demand|quota|free limit|rate limit|timeout|timed out/i.test(message);
 
@@ -114,8 +116,13 @@ export function providerOrder(chain: string[], now = Date.now()): string[] {
   const ready = chain.filter((n) => (restingUntil.get(n) ?? 0) <= now);
   return [...ready, ...chain.filter((n) => !ready.includes(n))];
 }
-export function restProvider(name: string, now = Date.now()) {
-  restingUntil.set(name, now + cooldownMs());
+export function restProvider(name: string, now = Date.now(), ms = cooldownMs()) {
+  restingUntil.set(name, now + Math.min(ms, cooldownMs() ? ms : 0));
+}
+/** When a text provider can be used again, or null if it is ready (for the free-AI fuel gauge). */
+export function textProviderRest(name: string, now = Date.now()): number | null {
+  const t = restingUntil.get(name) ?? 0;
+  return t > now ? t : null;
 }
 /** Tests only. */
 export function _resetProviderRest() {
@@ -175,7 +182,8 @@ export async function generateText(ctx: GenerateContext, req: TextRequest): Prom
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(message);
-      if (isBusyError(message)) restProvider(name);
+      // Out for the day: rest an hour (and check again) instead of asking every 5 minutes.
+      if (isBusyError(message)) restProvider(name, Date.now(), isDailyError(message) ? 60 * 60_000 : cooldownMs());
       await db.insert(schema.generations).values({
         workspaceId: ctx.workspaceId,
         brandId: ctx.brandId ?? null,

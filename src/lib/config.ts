@@ -102,7 +102,7 @@ export function httpTimeoutMs(): number {
 
 export type ImageProviderConfig = {
   name: string;
-  driver: "cloudflare" | "huggingface" | "pollinations" | "fake";
+  driver: "cloudflare" | "huggingface" | "pollinations" | "brand_art" | "fake";
   apiKey?: string;
   accountId?: string;
   model: string;
@@ -144,6 +144,9 @@ export function imageProviderConfig(name: string): ImageProviderConfig | null {
     case "pollinations":
       // No key. Fine for internal tests; check its terms before selling to customers.
       return { name, driver: "pollinations", model: e.POLLINATIONS_MODEL ?? "flux", dailyLimit: num(e.POLLINATIONS_DAILY_LIMIT, 100) };
+    case "brand_art":
+      // Always works, free: a designed on-brand background (used when every image AI is out for the day).
+      return { name, driver: "brand_art", model: "brand-art-1", dailyLimit: 1_000_000 };
     case "fake":
       // Always works offline: brand-colour gradient background.
       return { name, driver: "fake", model: "gradient-1", dailyLimit: 1_000_000 };
@@ -156,7 +159,7 @@ export function imageProviderConfig(name: string): ImageProviderConfig | null {
 
 export type VoiceProviderConfig = {
   name: string;
-  driver: "cloudflare" | "piper" | "silent";
+  driver: "cloudflare" | "groq" | "piper" | "silent";
   apiKey?: string;
   accountId?: string;
   model: string;
@@ -165,7 +168,7 @@ export type VoiceProviderConfig = {
 };
 
 export function voiceChain(): string[] {
-  return (process.env.AGENT_VOICE_CHAIN ?? "cloudflare,piper,silent")
+  return (process.env.AGENT_VOICE_CHAIN ?? "cloudflare,groq,piper,silent")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -183,6 +186,17 @@ export function voiceProviderConfig(name: string): VoiceProviderConfig | null {
         accountId: e.CLOUDFLARE_ACCOUNT_ID,
         model: e.CLOUDFLARE_TTS_MODEL ?? "@cf/myshell-ai/melotts",
         dailyLimit: num(e.CLOUDFLARE_TTS_DAILY_LIMIT, 200),
+      };
+    case "groq":
+      // Groq Orpheus text-to-speech (free tier, same GROQ_API_KEY as text).
+      // First use: accept the model's terms once at https://console.groq.com/playground?model=canopylabs/orpheus-v1-english
+      return {
+        name,
+        driver: "groq",
+        apiKey: e.GROQ_API_KEY,
+        model: e.GROQ_TTS_MODEL ?? "canopylabs/orpheus-v1-english",
+        command: e.GROQ_TTS_VOICE ?? "hannah",
+        dailyLimit: num(e.GROQ_TTS_DAILY_LIMIT, 300),
       };
     case "piper":
       // Piper: free neural voice that runs on your own machine.
