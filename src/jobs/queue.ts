@@ -41,7 +41,13 @@ async function claimNext(): Promise<Job | null> {
     WHERE id = (
       SELECT id FROM ${schema.jobs}
       WHERE status = 'queued' AND run_after <= now()
-      ORDER BY id
+      -- Quick text work (plans, captions, articles, replies, publishing) before slow media work,
+      -- so one long reel never holds up a week's writing or an article.
+      ORDER BY CASE
+        WHEN type IN ('post.design', 'campaign.design') THEN 1
+        WHEN type = 'post.reel' THEN 2
+        ELSE 0
+      END, id
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     )

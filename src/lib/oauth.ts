@@ -11,7 +11,7 @@ export const OAUTH_SERVICE_COOKIE = "ma_oauth_svc";
 
 /** Where Google sends the user back: APP_URL in production, else the address the app was opened at. */
 export function googleRedirectUri(requestUrl: string): string {
-  const base = process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, "") : new URL(requestUrl).origin;
+  const base = process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, "") : new URL(requestUrl).origin.replace("//0.0.0.0", "//localhost");
   return `${base}/api/oauth/google/callback`;
 }
 

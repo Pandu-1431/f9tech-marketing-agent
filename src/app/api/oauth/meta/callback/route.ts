@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { appUrl } from "@/lib/app-url";
 import { requireEditor } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
 import { exchangeMetaCode, metaRedirectUri } from "@/agent/publish/meta-connect";
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
   const { workspace } = await requireEditor();
   const brandId = checkOAuthState(req.cookies.get(OAUTH_COOKIE)?.value, req.nextUrl.searchParams.get("state"));
   const to = (path: string) => {
-    const res = NextResponse.redirect(new URL(path, req.url));
+    const res = NextResponse.redirect(appUrl(path, req));
     res.cookies.delete(OAUTH_COOKIE);
     return res;
   };

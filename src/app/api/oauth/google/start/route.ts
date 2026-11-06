@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { appUrl } from "@/lib/app-url";
 import { requireEditor } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
 import { googleAuthUrl, googleConfigured } from "@/agent/publish/youtube";
@@ -12,11 +13,11 @@ export async function GET(req: NextRequest) {
   const brandId = Number(req.nextUrl.searchParams.get("brandId"));
   const service = googleService(req.nextUrl.searchParams.get("service"));
   const brand = await getBrand(workspace.id, brandId);
-  if (!brand) return NextResponse.redirect(new URL("/brands", req.url));
-  if (!googleConfigured()) return NextResponse.redirect(new URL(`/brands/${brandId}?${service}=not-configured`, req.url));
+  if (!brand) return NextResponse.redirect(appUrl("/brands", req));
+  if (!googleConfigured()) return NextResponse.redirect(appUrl(`/brands/${brandId}?${service}=not-configured`, req));
   const { state, cookie } = newOAuthState(brandId);
   const res = NextResponse.redirect(googleAuthUrl(googleRedirectUri(req.url), state, SERVICE_SCOPES[service]));
-  const opts = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", maxAge: 600, path: "/" };
+  const opts = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production" && !(process.env.APP_URL ?? "").startsWith("http://"), maxAge: 600, path: "/" };
   res.cookies.set(OAUTH_COOKIE, cookie, opts);
   res.cookies.set(OAUTH_SERVICE_COOKIE, service, opts);
   return res;

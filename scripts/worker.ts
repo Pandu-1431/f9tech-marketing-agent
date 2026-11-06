@@ -14,6 +14,7 @@ import { autoApproveReady } from "../src/agent/auto-approve";
 import { restoreProviderState } from "../src/agent/provider-state";
 
 const IDLE_MS = Number(process.env.WORKER_IDLE_MS ?? 3000);
+const LANES = Math.max(1, Math.min(6, Number(process.env.AGENT_JOB_LANES ?? 3) || 3));
 let stopping = false;
 
 process.on("SIGINT", () => (stopping = true));
@@ -34,7 +35,9 @@ async function main() {
       await queueDuePublications();
       await queueDueAnalysts();
       await queueDueCommunity();
-      const ran = await processJobs(20);
+      // Several lanes at once (AGENT_JOB_LANES, default 3): jobs are claimed with SKIP LOCKED, so
+      // lanes never take the same job, and a slow reel no longer blocks everything behind it.
+      const ran = (await Promise.all(Array.from({ length: LANES }, () => processJobs(10)))).reduce((a, b) => a + b, 0);
       if (ran > 0) console.log(`[worker] ran ${ran} job(s)`);
       else await new Promise((r) => setTimeout(r, IDLE_MS));
     } catch (err) {

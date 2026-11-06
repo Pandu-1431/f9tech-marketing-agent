@@ -28,7 +28,7 @@ const VERSION = () => process.env.META_GRAPH_VERSION ?? "v23.0";
 export const metaConfigured = () => Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET);
 
 export function metaRedirectUri(requestUrl: string): string {
-  const base = process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, "") : new URL(requestUrl).origin;
+  const base = process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, "") : new URL(requestUrl).origin.replace("//0.0.0.0", "//localhost");
   return `${base}/api/oauth/meta/callback`;
 }
 

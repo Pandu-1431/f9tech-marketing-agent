@@ -320,6 +320,7 @@ const articleJob: Handler = async (payload) => {
   try {
     await writeArticle(Number(payload.workspaceId), Number(payload.articleId));
   } catch (err) {
+    if (err instanceof Error && /Article not found|Business not found/.test(err.message)) throw permanent(err.message); // deleted meanwhile
     if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
     throw err;
   }

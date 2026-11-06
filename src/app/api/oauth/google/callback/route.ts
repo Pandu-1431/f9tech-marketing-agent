@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { appUrl } from "@/lib/app-url";
 import { requireEditor } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
 import { saveChannel } from "@/agent/publish";
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
   const brandId = checkOAuthState(req.cookies.get(OAUTH_COOKIE)?.value, req.nextUrl.searchParams.get("state"));
   const service = googleService(req.cookies.get(OAUTH_SERVICE_COOKIE)?.value);
   const back = (status: string, brand = brandId) => {
-    const res = NextResponse.redirect(new URL(brand ? `/brands/${brand}?${service}=${encodeURIComponent(status)}` : "/brands", req.url));
+    const res = NextResponse.redirect(appUrl(brand ? `/brands/${brand}?${service}=${encodeURIComponent(status)}` : "/brands", req));
     res.cookies.delete(OAUTH_COOKIE);
     res.cookies.delete(OAUTH_SERVICE_COOKIE);
     return res;
