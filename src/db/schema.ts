@@ -648,3 +648,34 @@ export const linkClicks = pgTable(
 
 export type Lead = typeof leads.$inferSelect;
 export type TrackingLink = typeof links.$inferSelect;
+
+// Blog & SEO writer: website articles built from the brand's SEO kit (src/agent/articles.ts).
+export const articles = pgTable(
+  "articles",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => brands.id, { onDelete: "cascade" }),
+    topic: varchar("topic", { length: 200 }).notNull(),
+    keyword: varchar("keyword", { length: 120 }),
+    title: varchar("title", { length: 200 }),
+    slug: varchar("slug", { length: 120 }),
+    metaDescription: varchar("meta_description", { length: 200 }),
+    body: text("body"),
+    faq: jsonb("faq").$type<{ q: string; a: string }[]>().default([]).notNull(),
+    coverKey: text("cover_key"),
+    words: integer("words").default(0).notNull(),
+    // writing | ready | failed
+    status: varchar("status", { length: 12 }).default("writing").notNull(),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("articles_brand").on(t.workspaceId, t.brandId)],
+);
+
+export type Article = typeof articles.$inferSelect;

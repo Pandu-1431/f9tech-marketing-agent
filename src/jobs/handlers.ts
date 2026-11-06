@@ -314,6 +314,17 @@ const directorPlanJob: Handler = async (payload) => {
   }
 };
 
+/** Blog & SEO writer: write one article (and its cover image). */
+const articleJob: Handler = async (payload) => {
+  const { writeArticle } = await import("@/agent/articles");
+  try {
+    await writeArticle(Number(payload.workspaceId), Number(payload.articleId));
+  } catch (err) {
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
+    throw err;
+  }
+};
+
 /** Analyst: read post results, learn, remember (daily per brand). */
 const analystJob: Handler = async (payload) => {
   const { runAnalyst } = await import("@/agent/analyst");
@@ -374,6 +385,7 @@ designPostJob.onFinalFailure = async (payload, error) => {
 export const handlers = {
   "autopilot.run": autopilotJob,
   "director.plan": directorPlanJob,
+  "article.write": articleJob,
   "analyst.run": analystJob,
   "post.publish": publishJob,
   "campaign.plan": planCampaignJob,

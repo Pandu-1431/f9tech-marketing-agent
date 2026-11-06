@@ -150,6 +150,18 @@ export class FakeProvider implements TextProvider {
         review: none ? "No posts were published last week, so there are no results to judge." : "Reels reached more people than posters.",
         changes: none ? ["Approve posts early in the week so they go out on time"] : ["Make more reels", "Put the link in the first line"],
       });
+    } else if (p.includes("TASK: BLOG_ARTICLE")) {
+      const topic = /TOPIC: ([^\n]+)/.exec(p)?.[1] ?? "Our guide";
+      const cta = /CALL TO ACTION LINK: ([^\n]+)/.exec(p)?.[1];
+      const para = "This guide explains the basics in plain words, with simple steps you can follow today and the mistakes most people make at the start.";
+      text = JSON.stringify({
+        title: topic.slice(0, 60),
+        slug: topic,
+        meta_description: `${topic}: a simple, practical guide with steps, examples and common mistakes to avoid. Read it in five minutes.`.slice(0, 155),
+        keyword: topic.toLowerCase(),
+        body: [para, "", "## Why it matters", para, "", "## Step by step", "1. Start small", "2. Keep going every day", "3. **Check** your progress", "", "## Mistakes to avoid", "- Doing too much at once", "- Skipping the basics", "", "## Get started", cta ? `Ready? [Talk to us](${cta}).` : "Ready? Message us today."].join("\n"),
+        faq: [{ q: `How long does ${topic.toLowerCase()} take?`, a: "Most people see progress in a few weeks." }],
+      });
     } else if (p.includes("TASK: SEO_KIT")) {
       const searches = [...p.matchAll(/^- (.+)$/gm)].map((m) => m[1]).filter((s) => !s.startsWith("none available"));
       const city = (/City \/ market: ([^\n]+)/.exec(req.system)?.[1] ?? "").replace("not set", "").trim();

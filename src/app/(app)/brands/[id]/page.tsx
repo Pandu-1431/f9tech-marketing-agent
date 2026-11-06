@@ -39,6 +39,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{brand.name}</h1>
         <div className="flex items-center gap-2">
+          <Link href={`/brands/${brand.id}/articles`} className="btn-secondary">Blog articles</Link>
           <Link href={`/reports/${brand.id}`} className="btn-secondary">Monthly report</Link>
           <Link href={`/brands/${brand.id}/training`} className="btn-secondary">Training center</Link>
           <form action={deleteBrandAction.bind(null, brand.id)}>

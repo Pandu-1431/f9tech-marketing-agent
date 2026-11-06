@@ -134,6 +134,13 @@
       "when": 1794200000000,
       "tag": "0018_leads_links",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794300000000,
+      "tag": "0019_articles",
+      "breakpoints": true
     }
   ]
 }
