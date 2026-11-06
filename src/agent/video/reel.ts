@@ -10,7 +10,7 @@ import { getFile, newKey, putFile } from "@/lib/storage";
 import { generateImage } from "../images/router";
 import { QuotaExceededError } from "../router";
 import { imagePrompt, siteLabel } from "../style";
-import { renderSceneFrame, REEL_H, REEL_W, textBackground } from "./frames";
+import { captionChunks, captionFrame, renderSceneFrame, REEL_H, REEL_W, textBackground } from "./frames";
 import { autoStyle, motionFor, styleImageSuffix, transitionFor } from "./styles";
 import { presenterFace } from "./presenter";
 import { endCardFrame, productShotBackground } from "./cards";
@@ -182,7 +182,11 @@ export async function buildReelVideo(input: {
       voiceProvider = voice.provider;
       const wavPath = path.join(dir, `v${i}.wav`);
       await fs.writeFile(wavPath, voice.wav);
-      const dur = Math.max(2.5, wavDurationSec(voice.wav) + 0.5);
+      const voiceSec = wavDurationSec(voice.wav);
+      const dur = Math.max(2.5, voiceSec + 0.5);
+      // Animated captions (a few words at a time, in time with the voice) on every scene except the
+      // call to action and text-only scenes, which already show their words big.
+      const live = !last && kind !== "text";
 
       // 4. frame
       const frame = await renderSceneFrame({
@@ -198,7 +202,15 @@ export async function buildReelVideo(input: {
         fonts: brandFonts(brand.fonts),
         layout: kind === "text" ? "text" : kind === "presenter" ? "presenter" : style === "concept" ? "concept" : "standard",
         label: kind === "presenter" ? presenter!.name : style === "concept" ? (scene.step ?? null) : null,
+        liveCaptions: live,
       });
+      const captions = live ? captionChunks(scene.voiceover, voiceSec > 0.3 ? voiceSec : dur - 0.5) : [];
+      const capPaths: string[] = [];
+      for (const [k, c] of captions.entries()) {
+        const p = path.join(dir, `cap${i}_${k}.png`);
+        await fs.writeFile(p, await captionFrame(c.text, brand.colors, brandFonts(brand.fonts)));
+        capPaths.push(p);
+      }
       const bgPath = path.join(dir, `b${i}.png`);
       const overlayPath = path.join(dir, `o${i}.png`);
       await fs.writeFile(bgPath, frame.background);
@@ -213,10 +225,16 @@ export async function buildReelVideo(input: {
         "-loop", "1", "-framerate", String(FPS), "-i", bgPath,
         "-i", wavPath,
         "-loop", "1", "-framerate", String(FPS), "-i", overlayPath,
+        ...capPaths.flatMap((p) => ["-loop", "1", "-framerate", String(FPS), "-i", p]),
         "-filter_complex",
         `[0:v]scale=1620:2880,zoompan=z='${m.z}':x='${m.x}':y='${m.y}':d=1:s=${REEL_W}x${REEL_H}:fps=${FPS}[bg];` +
           `[2:v]format=rgba,fade=t=in:st=0.1:d=0.4:alpha=1[ov];` +
-          `[bg][ov]overlay=x=0:y='if(lt(t,0.5),70*(1-t/0.5),0)':shortest=1,format=yuv420p[v];` +
+          `[bg][ov]overlay=x=0:y='if(lt(t,0.5),70*(1-t/0.5),0)':shortest=1[s0];` +
+          // Each caption chunk pops in for its words, with a small rise.
+          captions
+            .map((c, k) => `[s${k}][${3 + k}:v]overlay=x=0:y='if(lt(t-${c.start},0.12),24*(1-(t-${c.start})/0.12),0)':enable='between(t,${c.start},${c.end})':shortest=1[s${k + 1}];`)
+            .join("") +
+          `[s${captions.length}]format=yuv420p[v];` +
           `[1:a]aresample=44100,apad=whole_dur=${dur.toFixed(2)},aformat=channel_layouts=stereo[a]`,
         "-map", "[v]", "-map", "[a]",
         "-frames:v", String(frames), "-t", dur.toFixed(2),

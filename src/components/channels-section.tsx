@@ -112,6 +112,20 @@ export function ChannelsSection({
             <p className="text-xs text-amber-800">Needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local, then restart the app.</p>
           )}
           {yt && <p className={`text-sm ${yt.ok ? "text-emerald-700" : "text-red-700"}`}>{yt.text}</p>}
+          {youtubeReady && (
+            <details className="text-xs text-zinc-600" data-testid="youtube-help">
+              <summary className="cursor-pointer">Google shows &quot;Error 400&quot; or &quot;Access blocked&quot;?</summary>
+              <ol className="mt-1 list-decimal space-y-1 pl-4">
+                <li>Google Cloud → <b>APIs &amp; Services → Library</b>: enable <b>YouTube Data API v3</b>.</li>
+                <li><b>Google Auth Platform → Audience</b>: keep the app in <b>Testing</b> and add the Google account that owns the channel under <b>Test users</b>. If the channel is a <i>brand account</i>, add that too, or pick your main account.</li>
+                <li><b>Data Access</b>: add the scopes <code>youtube.upload</code> and <code>youtube.readonly</code>.</li>
+                <li><b>Branding</b>: fill app name, support email and developer email, then Save.</li>
+                <li><b>Clients → your web client</b>: redirect URI <code>{"<this address>"}/api/oauth/google/callback</code> (e.g. http://localhost:3000/...).</li>
+                <li>A Google Workspace address (your own domain) may have YouTube turned off by its admin: try a Gmail account that owns the channel.</li>
+              </ol>
+              <p className="mt-1">Still blocked? Click &quot;Error 400&quot; on Google&apos;s page: the line under it names the exact reason.</p>
+            </details>
+          )}
         </div>
         <div className="space-y-2 rounded-lg border border-zinc-200 p-3" data-testid="gbp-connect">
           <p className="font-medium">Google Business Profile</p>

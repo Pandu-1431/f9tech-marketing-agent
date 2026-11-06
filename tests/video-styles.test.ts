@@ -17,6 +17,8 @@ import { autoStyle, MULTI_STYLES, styleScriptLines } from "@/agent/video/styles"
 import { sceneKind } from "@/agent/video/script";
 import { transitionFilter, XFADE } from "@/agent/video/reel";
 import { presenterPrompt } from "@/agent/video/presenter";
+import { captionChunks, captionFrame } from "@/agent/video/frames";
+import sharp from "sharp";
 import { freshDb, makeWorkspace } from "./helpers";
 
 function probe(file: string) {
@@ -57,11 +59,26 @@ describe("video styles: rules", () => {
     expect(transitionFilter([3], "text")).toBe("[0:v]null[v];[0:a]anull[a]");
   });
 
+  it("splits a voice line into short timed captions that cover the whole line", async () => {
+    const line = "At Sunrise School every child gets a chance to shine on stage this year";
+    const c = captionChunks(line, 4);
+    expect(c.length).toBeGreaterThan(3);
+    expect(c.every((x) => x.text.split(" ").length <= 3 && x.text.length <= 18 || x.text.split(" ").length === 1)).toBe(true);
+    expect(c.map((x) => x.text).join(" ")).toBe(line);
+    expect(c[0].start).toBeCloseTo(0.1, 2);
+    expect(c.at(-1)!.end).toBeCloseTo(4, 1);
+    for (let i = 1; i < c.length; i++) expect(c[i].start).toBeCloseTo(c[i - 1].end, 2);
+    expect(captionChunks("", 3)).toEqual([]);
+    const png = await sharp(await captionFrame("Register today", ["#1D4ED8", "#F59E0B"])).metadata();
+    expect([png.width, png.height]).toEqual([1080, 1920]);
+  });
+
   it("describes one consistent presenter face per brand", () => {
     const a = presenterPrompt({ id: 2, industry: "school", city: null, audience: null });
-    expect(a).toMatch(/Indian man/);
+    expect(a).toMatch(/adult Indian man/);
+    expect(a).toMatch(/not a child/);
     expect(a).toMatch(/school interior/);
-    expect(presenterPrompt({ id: 2, industry: null, city: null, audience: null }, 1)).toMatch(/Indian woman/);
+    expect(presenterPrompt({ id: 2, industry: null, city: null, audience: null }, 1)).toMatch(/adult Indian woman/);
   });
 });
 

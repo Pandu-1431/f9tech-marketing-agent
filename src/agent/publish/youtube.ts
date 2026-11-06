@@ -28,7 +28,8 @@ export function googleAuthUrl(redirectUri: string, state: string, scopes: string
   u.searchParams.set("scope", scopes.join(" "));
   u.searchParams.set("access_type", "offline"); // we need a refresh token
   u.searchParams.set("prompt", "consent"); // always return a refresh token
-  u.searchParams.set("include_granted_scopes", "true");
+  // No include_granted_scopes: each service (YouTube, Business Profile, Sheet) asks only for its own
+  // permission, so one service's consent never mixes into another's token.
   u.searchParams.set("state", state);
   return u.toString();
 }

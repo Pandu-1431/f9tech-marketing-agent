@@ -17,13 +17,16 @@ const NAMES = ["Rahul", "Priya", "Arjun", "Ananya", "Karthik", "Sneha", "Vikram"
 
 export function presenterPrompt(brand: Pick<Brand, "id" | "industry" | "city" | "audience">, variant = 0): string {
   const woman = (brand.id + variant) % 2 === 1;
-  const who = woman ? "a friendly Indian woman in her late twenties, hair neatly tied back, simple solid-colour kurta" : "a friendly Indian man in his late twenties, short neat hair, light stubble, plain white t-shirt";
+  const who = woman
+    ? "a confident adult Indian woman aged about 30, professional presenter and host, hair neatly tied back, simple solid-colour kurta, small earrings"
+    : "a confident adult Indian man aged about 30, professional presenter and host, short neat hair, light stubble, plain white t-shirt";
   const where = brand.industry ? `softly blurred ${brand.industry} interior behind` : "softly blurred bright office behind";
   return [
     `Photorealistic vertical portrait photo of ${who}`,
     "looking straight into the camera, mid-sentence with a warm natural smile, upper body visible, hands relaxed",
     where,
     "natural window light, shot on a phone camera, creator vlog style, sharp focus on the face, 9:16, no text",
+    "an adult, not a child or teenager, no school uniform",
   ].join(", ");
 }
 

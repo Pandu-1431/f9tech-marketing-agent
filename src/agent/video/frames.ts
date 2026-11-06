@@ -25,7 +25,73 @@ type FrameInput = {
   layout?: "standard" | "text" | "presenter" | "concept";
   /** Concept: the step label ("The idea"). Presenter: the presenter's name. */
   label?: string | null;
+  /** Animated captions are drawn separately (captionFrame): leave out the static subtitle box. */
+  liveCaptions?: boolean;
 };
+
+/** Where animated captions sit: the lower middle, above the platform's caption area. */
+export const CAPTION_Y = 1230;
+
+/**
+ * Split a voiceover line into short caption chunks (about 3 words) timed to the voice:
+ * longer chunks stay on screen longer. Times are seconds from the start of the scene.
+ */
+export function captionChunks(text: string, voiceSec: number, maxChars = 18): { text: string; start: number; end: number }[] {
+  const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const chunks: string[] = [];
+  let cur: string[] = [];
+  for (const w of words) {
+    const next = [...cur, w].join(" ");
+    if (cur.length && (next.length > maxChars || cur.length >= 3)) {
+      chunks.push(cur.join(" "));
+      cur = [w];
+    } else cur.push(w);
+  }
+  if (cur.length) chunks.push(cur.join(" "));
+  if (!chunks.length) return [];
+  const lead = 0.1;
+  const span = Math.max(0.6 * chunks.length, voiceSec - lead);
+  const weights = chunks.map((c) => c.length + 4);
+  const total = weights.reduce((a, b) => a + b, 0);
+  let t = lead;
+  return chunks.map((c, i) => {
+    const d = (span * weights[i]) / total;
+    const out = { text: c, start: Number(t.toFixed(3)), end: Number((t + d).toFixed(3)) };
+    t += d;
+    return out;
+  });
+}
+
+/** One caption chunk as a transparent full-frame PNG: big bold words, the longest word in the accent colour. */
+export async function captionFrame(text: string, colors: string[], fonts?: { heading: string; body: string }): Promise<Buffer> {
+  const palette = colors.filter((c) => /^#[0-9a-f]{6}$/i.test(c));
+  const accent = palette[1] ?? palette[0] ?? "#F59E0B";
+  const family = fonts?.heading ?? DEFAULT_HEADING_FONT;
+  const FONT = fontStack(family, text);
+  const size = 78;
+  const lines = wrap(text, 14, 2);
+  const longest = text.split(" ").reduce((a, b) => (b.replace(/[^\p{L}\p{N}]/gu, "").length > a.replace(/[^\p{L}\p{N}]/gu, "").length ? b : a), "");
+  let marked = false;
+  const line = (l: string) =>
+    l
+      .split(" ")
+      .map((w) => {
+        const hit = !marked && w === longest;
+        if (hit) marked = true;
+        return hit ? `<tspan fill="${accent}">${escapeXml(w)}</tspan>` : escapeXml(w);
+      })
+      .join(" ");
+  const top = CAPTION_Y - ((lines.length - 1) * 96) / 2;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${REEL_W}" height="${REEL_H}">
+    ${lines
+      .map(
+        (l, i) =>
+          `<text x="${REEL_W / 2}" y="${top + i * 96}" text-anchor="middle" font-family="${FONT}" font-weight="900" font-size="${size}" fill="#ffffff" stroke="#000000" stroke-width="12" stroke-linejoin="round" paint-order="stroke">${line(l)}</text>`,
+      )
+      .join("")}
+  </svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
 
 const hex = (c: string) => /^#[0-9a-f]{6}$/i.test(c);
 
@@ -88,7 +154,7 @@ export async function renderSceneFrame(f: FrameInput): Promise<{ background: Buf
   // Text videos: words in the middle of the screen. Others: below the logo row (concept leaves room for the step chip).
   const headTop = isText ? Math.round(H / 2 - (headLines.length * lineH) / 2 - headSize) : safe.top + (layout === "concept" ? 290 : 210);
   const subSize = 44;
-  const subLines = f.cta ? [] : wrap(f.subtitle, Math.floor((boxW - 60) / (subSize * 0.55)), isText ? 3 : 4);
+  const subLines = f.cta || f.liveCaptions ? [] : wrap(f.subtitle, Math.floor((boxW - 60) / (subSize * 0.55)), isText ? 3 : 4);
   const subBoxH = subLines.length * 60 + 52;
   const subBottom = H - safe.bottom - 40;
   const subTop = subBottom - subBoxH;
@@ -116,7 +182,7 @@ export async function renderSceneFrame(f: FrameInput): Promise<{ background: Buf
   const tagW = Math.round((f.label?.length ?? 0) * 26 + f.brandName.length * 18 + 110);
   const nameTag =
     layout === "presenter" && label && !f.cta
-      ? `<g transform="translate(${left} ${subTop - 120})">
+      ? `<g transform="translate(${left} ${f.liveCaptions ? CAPTION_Y + 140 : subTop - 120})">
            <rect width="${Math.min(boxW, tagW)}" height="84" rx="18" fill="#fff" fill-opacity="0.95"/>
            <rect width="12" height="84" rx="6" fill="${accent}"/>
            <text x="32" y="55" font-family="${BODY}" font-weight="800" font-size="40" fill="#111">${escapeXml(f.label ?? "")}<tspan font-weight="500" font-size="32" fill="#555"> · ${escapeXml(f.brandName.split(" · ")[0])}</tspan></text>

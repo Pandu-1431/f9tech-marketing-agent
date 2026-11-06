@@ -58,6 +58,7 @@ export const MOTIONS: Record<string, { z: string; x: string; y: string }> = {
   panRight: { z: "1.15", x: "(iw-iw/zoom)*min(on/180,1)", y: "ih/2-(ih/zoom/2)" },
   panLeft: { z: "1.15", x: "(iw-iw/zoom)*(1-min(on/180,1))", y: "ih/2-(ih/zoom/2)" },
   panUp: { z: "1.15", x: "iw/2-(iw/zoom/2)", y: "(ih-ih/zoom)*(1-min(on/180,1))" },
+  punchIn: { z: "if(lt(on,24),1+0.006*on,1.144+0.0003*(on-24))", x: "iw/2-(iw/zoom/2)", y: "ih/2-(ih/zoom/2)" },
   // Presenter "talking": slow push-in with a gentle breathing bob, like a handheld phone camera.
   talk: { z: "1.06+0.0004*on+0.008*sin(on/9)", x: "iw/2-(iw/zoom/2)+6*sin(on/23)", y: "ih/2-(ih/zoom/2)+5*sin(on/17)" },
 };
@@ -72,6 +73,8 @@ const ORDER: Record<ReelStyle, string[]> = {
 
 export function motionFor(style: ReelStyle, sceneIndex: number, kind?: string): { z: string; x: string; y: string } {
   if (kind === "presenter") return MOTIONS.talk;
+  // The hook: a quick punch-in in the first second stops the scroll.
+  if (sceneIndex === 0) return MOTIONS.punchIn;
   const list = ORDER[style] ?? ORDER.classic;
   return MOTIONS[list[sceneIndex % list.length]];
 }

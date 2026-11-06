@@ -81,12 +81,26 @@ export class PollinationsImageProvider implements ImageProvider {
     this.model = cfg.model;
   }
   async generate(req: ImageRequest): Promise<ImageResult> {
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(req.prompt)}?width=${req.width}&height=${req.height}&nologo=true&model=${this.model}${req.seed ? `&seed=${req.seed}` : ""}`;
+    // Free (no token) images carry a small "pollinations.ai" mark in the bottom-right corner:
+    // ask for a slightly taller image and cut that strip off.
+    const extra = Math.round(req.height * 0.07);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(req.prompt)}?width=${req.width}&height=${req.height + extra}&nologo=true&model=${this.model}${req.seed ? `&seed=${req.seed}` : ""}`;
     // A free Pollinations token (https://auth.pollinations.ai) lifts the speed limit a lot.
     const token = process.env.POLLINATIONS_TOKEN;
     const res = await fetch(url, { signal: timeout(), headers: token ? { authorization: `Bearer ${token}` } : undefined });
     if (!res.ok) await fail(this.name, res);
-    return { data: Buffer.from(await res.arrayBuffer()), mime: res.headers.get("content-type") ?? "image/jpeg" };
+    const raw = Buffer.from(await res.arrayBuffer());
+    try {
+      const img = sharp(raw);
+      const meta = await img.metadata();
+      const w = meta.width ?? req.width;
+      const h = meta.height ?? req.height + extra;
+      const keep = Math.max(1, Math.round(h * (req.height / (req.height + extra))));
+      const data = await img.extract({ left: 0, top: 0, width: w, height: Math.min(h, keep) }).resize(req.width, req.height, { fit: "cover" }).png().toBuffer();
+      return { data, mime: "image/png" };
+    } catch {
+      return { data: raw, mime: res.headers.get("content-type") ?? "image/jpeg" };
+    }
   }
 }
 
