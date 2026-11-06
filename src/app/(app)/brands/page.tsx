@@ -5,11 +5,12 @@ import { freePlan } from "@/lib/config";
 import { listBrands } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
-export default async function BrandsPage() {
+export default async function BrandsPage({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
   const { workspace, role } = await requireAuth();
   const canEdit = canEditContent(role);
   const brands = await listBrands(workspace.id);
   const max = freePlan().maxBrands;
+  const deleted = (await searchParams).deleted?.slice(0, 160);
 
   return (
     <div className="space-y-6">
@@ -26,6 +27,12 @@ export default async function BrandsPage() {
           <span className="text-sm text-zinc-500">Free plan limit reached</span>
         )}
       </div>
+
+      {deleted && (
+        <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm text-zinc-700" data-testid="brand-deleted">
+          “{deleted}” was deleted with its posts and files.
+        </p>
+      )}
 
       {brands.length === 0 ? (
         <div className="card text-sm text-zinc-500">No business accounts yet.</div>

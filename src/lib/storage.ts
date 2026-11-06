@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 /*
  * File storage for logos, posters, videos and audio.
@@ -73,6 +73,26 @@ export async function getFile(key: string): Promise<Buffer | null> {
   } catch {
     return null;
   }
+}
+
+/** Delete stored files (missing ones are fine). Returns how many keys were sent for deletion. */
+export async function deleteFiles(keys: string[]): Promise<number> {
+  const list = [...new Set(keys.filter(Boolean))];
+  if (!list.length) return 0;
+  if (isS3()) {
+    for (let i = 0; i < list.length; i += 500) {
+      await s3Client().send(new DeleteObjectsCommand({ Bucket: process.env.S3_BUCKET, Delete: { Objects: list.slice(i, i + 500).map((Key) => ({ Key })), Quiet: true } }));
+    }
+    return list.length;
+  }
+  for (const key of list) {
+    try {
+      await fs.rm(safeLocalPath(key), { force: true });
+    } catch {
+      // an invalid or missing key: nothing to delete
+    }
+  }
+  return list.length;
 }
 
 /** Public URL for a stored file. */

@@ -7,8 +7,12 @@ import { DEFAULT_BODY_FONT, DEFAULT_HEADING_FONT, FONT_CHOICES } from "@/lib/fon
 const KNOWN_FONTS = new Set(FONT_CHOICES.map((f) => f.family));
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireEditor } from "@/lib/auth";
-import { createBrand, deleteBrand, deleteProductShots, LimitError, listProductShots, MAX_PRODUCT_SHOTS, setBrandLogo, updateBrand } from "@/lib/data";
+import { requireAuth, requireEditor } from "@/lib/auth";
+import { canManageTeam } from "@/lib/team";
+import { deleteBrandForever } from "@/lib/brand-delete";
+import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
+import { createBrand, deleteProductShots, getBrand, LimitError, listProductShots, MAX_PRODUCT_SHOTS, setBrandLogo, updateBrand } from "@/lib/data";
 import { getDb, schema } from "@/db";
 import { newKey, putFile } from "@/lib/storage";
 import sharp from "sharp";
@@ -174,9 +178,35 @@ export async function updateBrandAction(id: number, _prev: FormState, formData: 
   redirect("/brands");
 }
 
-export async function deleteBrandAction(id: number) {
-  const { workspace } = await requireEditor();
-  await deleteBrand(workspace.id, id);
+export type DeleteState = { error?: string } | undefined;
+
+// Wrong confirmations per user (per server process): 5 tries, then wait 15 minutes.
+const deleteTries = new Map<number, number[]>();
+
+/**
+ * Delete a business account for good. Owner only, and only after typing the business name,
+ * the account password and ticking "I understand". Its files are removed from storage too.
+ */
+export async function deleteBrandForeverAction(id: number, _prev: DeleteState, formData: FormData): Promise<DeleteState> {
+  const { workspace, user, role } = await requireAuth();
+  if (!canManageTeam(role)) return { error: "Only the workspace owner can delete a business account." };
+  const brand = await getBrand(workspace.id, id);
+  if (!brand) return { error: "This business account no longer exists." };
+  const now = Date.now();
+  const tries = (deleteTries.get(user.id) ?? []).filter((t) => now - t < 15 * 60_000);
+  if (tries.length >= 5) return { error: "Too many wrong tries. Wait 15 minutes and try again." };
+  const fail = (error: string): DeleteState => {
+    deleteTries.set(user.id, [...tries, now]);
+    return { error };
+  };
+  if (String(formData.get("confirmName") ?? "").trim() !== brand.name.trim()) return fail("The name does not match. Type the business name exactly as shown.");
+  if (formData.get("understand") !== "on") return fail("Tick the box to confirm you understand this cannot be undone.");
+  const db = await getDb();
+  const [row] = await db.select({ hash: schema.users.passwordHash }).from(schema.users).where(eq(schema.users.id, user.id));
+  if (!row || !(await bcrypt.compare(String(formData.get("password") ?? ""), row.hash))) return fail("Wrong password.");
+  deleteTries.delete(user.id);
+  await deleteBrandForever(workspace.id, id);
   revalidatePath("/brands");
-  redirect("/brands");
+  revalidatePath("/dashboard");
+  redirect(`/brands?deleted=${encodeURIComponent(brand.name)}`);
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deleteBrandAction, updateBrandAction } from "@/app/actions/brands";
+import { updateBrandAction } from "@/app/actions/brands";
+import { canManageTeam } from "@/lib/team";
 import { BrandForm } from "@/components/brand-form";
 import { AutopilotForm } from "@/components/autopilot-form";
 import { ChannelsSection } from "@/components/channels-section";
@@ -27,7 +28,7 @@ import { getBrand, listProductShots } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
 export default async function EditBrandPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ youtube?: string; gbp?: string; sheets?: string; presenter?: string; onboarded?: string }> }) {
-  const { workspace } = await requireEditor();
+  const { workspace, role } = await requireEditor();
   const { id } = await params;
   const { youtube, gbp, sheets, presenter, onboarded } = await searchParams;
   const brand = await getBrand(workspace.id, Number(id));
@@ -45,9 +46,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
           <Link href={`/brands/${brand.id}/articles`} className="btn-secondary">Blog articles</Link>
           <Link href={`/reports/${brand.id}`} className="btn-secondary">Monthly report</Link>
           <Link href={`/brands/${brand.id}/training`} className="btn-secondary">Training center</Link>
-          <form action={deleteBrandAction.bind(null, brand.id)}>
-            <button className="btn-danger">Delete</button>
-          </form>
+
         </div>
       </div>
       {onboarded && (
@@ -71,6 +70,18 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
       <SeoSection brand={brand} job={await seoJobState(workspace.id, brand.id)} />
       <MemorySection brand={brand} memory={await listMemory(workspace.id, brand.id)} measured={Number(measured?.n ?? 0)} />
       <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" timeZones={timeZoneOptions()} shots={shots} />
+      {canManageTeam(role) && (
+        <section className="rounded-2xl border border-red-200 p-5" data-testid="danger-zone">
+          <h2 className="font-semibold text-red-800">Danger zone</h2>
+          <p className="mt-1 text-sm text-zinc-600">
+            Delete this business account with all its posts, images, videos, leads and articles, and free the storage they use. You will see
+            exactly what goes and confirm with its name and your password.
+          </p>
+          <Link href={`/brands/${brand.id}/delete`} className="mt-3 inline-block rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">
+            Delete this business account…
+          </Link>
+        </section>
+      )}
     </div>
   );
 }
