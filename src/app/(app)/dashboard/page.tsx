@@ -15,6 +15,7 @@ import { AiTeam, ActivityFeed } from "@/components/ui/ai-team";
 import { FuelGauge } from "@/components/ui/fuel-gauge";
 import { CountUp } from "@/components/ui/count-up";
 import { StatusBadge } from "@/components/status-badge";
+import { reviewCount } from "@/lib/review";
 
 function Meter({ label, used, max, color }: { label: string; used: number; max: number; color: string }) {
   const pct = Math.min(100, Math.round((used / Math.max(1, max)) * 100));
@@ -42,7 +43,7 @@ export default async function DashboardPage() {
   const { workspace, role, user } = await requireAuth();
   const canEdit = canEditContent(role);
   const plan = freePlan();
-  const [brandCount, textUsed, imagesUsed, videosUsed, trial, counts, campaigns, team, rows] = await Promise.all([
+  const [brandCount, textUsed, imagesUsed, videosUsed, trial, counts, campaigns, team, rows, toReview] = await Promise.all([
     countBrands(workspace.id),
     workspaceTextUsageThisMonth(workspace.id),
     workspaceImageUsageThisMonth(workspace.id),
@@ -52,10 +53,10 @@ export default async function DashboardPage() {
     listCampaigns(workspace.id),
     teamStatus(workspace.id),
     connectionRows(),
+    reviewCount(workspace.id), // ready to approve now (not demo, not still being designed)
   ]);
   const brands = await listBrands(workspace.id);
   const autopilotOn = brands.filter((b) => b.autopilotEnabled);
-  const toReview = counts.drafted ?? 0;
   const workingNow = team.agents.filter((a) => a.working);
 
   return (
@@ -94,8 +95,8 @@ export default async function DashboardPage() {
           <div className="relative mt-6 flex flex-wrap gap-3">
             {canEdit && <Link href="/campaigns/new" className="btn">New campaign</Link>}
             {toReview > 0 && (
-              <Link href="/campaigns" className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/10">
-                Review {toReview} posts →
+              <Link href="/review" className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/10">
+                Review {toReview} post{toReview === 1 ? "" : "s"} →
               </Link>
             )}
           </div>

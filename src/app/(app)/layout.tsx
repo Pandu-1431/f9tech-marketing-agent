@@ -6,15 +6,20 @@ import { canEditContent, canManageTeam, listMyWorkspaces, ROLE_LABELS } from "@/
 import { switchWorkspaceAction } from "@/app/actions/team";
 import { NavLinks } from "@/components/ui/nav-links";
 import { Wordmark } from "@/components/ui/logo";
+import { reviewCount } from "@/lib/review";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, workspace, role } = await requireAuth();
-  const [trial, myWorkspaces] = await Promise.all([trialInfo(workspace.id), listMyWorkspaces(user.id)]);
+  const [trial, myWorkspaces, waiting] = await Promise.all([trialInfo(workspace.id), listMyWorkspaces(user.id), reviewCount(workspace.id)]);
 
+  const review = { href: "/review", label: "Review", count: waiting };
   const links = [
+    // Client reviewers come to approve: put Review first for them.
+    ...(role === "client" ? [review] : []),
     { href: "/dashboard", label: "Dashboard" },
     { href: "/brands", label: "Business accounts" },
     { href: "/campaigns", label: "Campaigns" },
+    ...(role === "client" ? [] : [review]),
     { href: "/calendar", label: "Calendar" },
     { href: "/library", label: "Library" },
     { href: "/tracker", label: "Tracker" },

@@ -131,6 +131,7 @@ export async function reviewPostAction(postId: number, decision: "approved" | "r
   }
   if (decision === "approved") kickJobs(); // learn from the person's edit, if there was one
   revalidatePath(`/campaigns/${post.campaignId}`);
+  revalidatePath("/review");
 }
 
 export async function editPostAction(postId: number, formData: FormData) {

@@ -93,4 +93,5 @@ tests/                 vitest: tenant isolation, limits, router, pipeline
 - [x] Layer 4 — SEO + SMO: SEO kit per business (Google + YouTube autocomplete → keyword clusters with intent, questions, brand/niche/local/broad hashtag sets, used by every caption), best time to post from results, Google Business Profile posts
 - [x] Layer 5 — tracking: Tracker page (filters, CSV) + Google Sheet sync per business account (daily + "Sync now")
 - [x] Layer 6 — publishing to Facebook, Instagram, YouTube Shorts, Telegram, Google Business Profile; Analyst pulls results
-- [ ] Layer 7 — client reviewer invites, polish, deploy to droplet
+- [x] Layer 7 — client reviewer invites + Review page (every post ready to approve, across campaigns, with a count in the nav), production deploy kit (`deploy/README.md`)
+- [ ] Go live on the droplet (needs droplet IP, domain, Supabase URL)
