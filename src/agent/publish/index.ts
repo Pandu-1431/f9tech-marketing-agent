@@ -9,6 +9,8 @@ import { publishFacebook, publishInstagram, testFacebook, testInstagram } from "
 import { publishTelegram, testTelegram } from "./telegram";
 import { publishYouTube, testYouTube } from "./youtube";
 import { publishGoogleBusiness, testGoogleBusiness } from "./google-business";
+import { publishX, testX } from "./x";
+import { publishLinkedIn, testLinkedIn } from "./linkedin";
 import { PublishConfigError, type ChannelAuth, type PublishInput, type PublishResult } from "./types";
 
 /*
@@ -17,7 +19,7 @@ import { PublishConfigError, type ChannelAuth, type PublishInput, type PublishRe
  * at the post's scheduled time. A version is never sent twice to the same channel.
  */
 
-export const CHANNEL_PLATFORMS = ["telegram", "facebook", "instagram", "youtube", "google_business"] as const;
+export const CHANNEL_PLATFORMS = ["telegram", "facebook", "instagram", "youtube", "google_business", "x", "linkedin"] as const;
 export type ChannelPlatform = (typeof CHANNEL_PLATFORMS)[number];
 
 const ADAPTERS: Record<ChannelPlatform, { test: (a: ChannelAuth) => Promise<string>; publish: (a: ChannelAuth, i: PublishInput) => Promise<PublishResult> }> = {
@@ -26,6 +28,8 @@ const ADAPTERS: Record<ChannelPlatform, { test: (a: ChannelAuth) => Promise<stri
   instagram: { test: testInstagram, publish: publishInstagram },
   youtube: { test: testYouTube, publish: publishYouTube },
   google_business: { test: testGoogleBusiness, publish: publishGoogleBusiness },
+  x: { test: testX, publish: publishX },
+  linkedin: { test: testLinkedIn, publish: publishLinkedIn },
 };
 
 export const isChannelPlatform = (p: string): p is ChannelPlatform => (CHANNEL_PLATFORMS as readonly string[]).includes(p);
@@ -33,6 +37,7 @@ export const isChannelPlatform = (p: string): p is ChannelPlatform => (CHANNEL_P
 /** Test the credentials, then save (or replace) the brand's channel for that platform. */
 export async function connectChannel(workspaceId: number, brandId: number, platform: ChannelPlatform, token: string, config: Record<string, string>) {
   const name = await ADAPTERS[platform].test({ token, config });
+  if (platform === "x") config = { ...config, username: name.replace(/^@/, "") }; // for post links
   return saveChannel(workspaceId, brandId, platform, name, token, config);
 }
 

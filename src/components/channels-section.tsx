@@ -98,6 +98,23 @@ export function ChannelsSection({
           ]}
           action={connectChannelAction.bind(null, brand.id, "instagram")}
         />
+        <ChannelForm
+          title="X (Twitter)"
+          help={<>Free API tier (limited posts per month). developer.x.com → your app → User authentication: Read and Write → Keys and tokens: copy the API key + secret and generate the Access token + secret.</>}
+          fields={[
+            { name: "apiKey", label: "API key", placeholder: "xvz1…", secret: true },
+            { name: "apiSecret", label: "API key secret", placeholder: "…", secret: true },
+            { name: "accessToken", label: "Access token", placeholder: "1234-…", secret: true },
+            { name: "accessSecret", label: "Access token secret", placeholder: "…", secret: true },
+          ]}
+          action={connectChannelAction.bind(null, brand.id, "x")}
+        />
+        <ChannelForm
+          title="LinkedIn (your profile)"
+          help={<>Free. linkedin.com/developers → create an app → add the products &quot;Share on LinkedIn&quot; and &quot;Sign In with LinkedIn using OpenID Connect&quot; → Docs and tools → OAuth token tool: pick openid, profile, w_member_social. The token lasts 60 days.</>}
+          fields={[{ name: "token", label: "Access token", placeholder: "AQV…", secret: true }]}
+          action={connectChannelAction.bind(null, brand.id, "linkedin")}
+        />
         <div className="space-y-2 rounded-lg border border-zinc-200 p-3" data-testid="youtube-connect">
           <p className="font-medium">YouTube Shorts</p>
           <div className="text-xs text-zinc-600">

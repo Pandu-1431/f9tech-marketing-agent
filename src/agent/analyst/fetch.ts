@@ -100,6 +100,8 @@ export const READERS: Record<string, MetricsReader | null> = {
   youtube: youtubeMetrics,
   telegram: null, // not measurable through the Bot API
   google_business: null, // local post insights are not in the public API
+  x: null, // the free X tier cannot read post metrics
+  linkedin: null, // personal-profile post metrics need LinkedIn partner access
 };
 
 /** Reads the metrics for a platform; null when that platform cannot be measured. */

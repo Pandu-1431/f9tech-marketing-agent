@@ -19,10 +19,18 @@ const field = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 export async function connectChannelAction(brandId: number, platform: string, _prev: ChannelFormState, formData: FormData): Promise<ChannelFormState> {
   const { workspace } = await requireEditor();
   if (!(await getBrand(workspace.id, brandId)) || !isChannelPlatform(platform)) return { error: "Not found" };
-  const token = field(formData, "token");
-  const config: Record<string, string> =
+  let token = field(formData, "token");
+  let config: Record<string, string> =
     platform === "telegram" ? { chatId: field(formData, "chatId") } : platform === "facebook" ? { pageId: field(formData, "pageId") } : { igUserId: field(formData, "igUserId") };
-  if (!token || Object.values(config).some((v) => !v)) return { error: "Fill in both fields." };
+  if (platform === "x") {
+    const keys = { apiKey: field(formData, "apiKey"), apiSecret: field(formData, "apiSecret"), accessToken: field(formData, "accessToken"), accessSecret: field(formData, "accessSecret") };
+    if (Object.values(keys).some((v) => !v)) return { error: "Fill in all four keys." };
+    token = JSON.stringify(keys);
+    config = {};
+  } else if (platform === "linkedin") {
+    config = {};
+  }
+  if (!token || Object.values(config).some((v) => !v)) return { error: "Fill in every field." };
   try {
     const ch = await connectChannel(workspace.id, brandId, platform, token, config);
     revalidatePath(`/brands/${brandId}`);
