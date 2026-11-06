@@ -155,6 +155,13 @@
       "when": 1794500000000,
       "tag": "0021_auto_approve",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794600000000,
+      "tag": "0022_voice_samples",
+      "breakpoints": true
     }
   ]
 }

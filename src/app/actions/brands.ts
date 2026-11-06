@@ -104,6 +104,7 @@ const brandSchema = z.object({
   services: text(3000),
   visualStyle: text(1000),
   keyFacts: text(3000),
+  voiceSamples: text(3000),
   timezone: z
     .string()
     .trim()
@@ -136,6 +137,7 @@ function readBrand(formData: FormData) {
     services: formData.get("services") ?? "",
     visualStyle: formData.get("visualStyle") ?? "",
     keyFacts: formData.get("keyFacts") ?? "",
+    voiceSamples: formData.get("voiceSamples") ?? "",
     timezone: formData.get("timezone") || DEFAULT_TIMEZONE,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form" } as const;

@@ -1,7 +1,7 @@
 import type { Brand } from "@/db/schema";
 import { memoryLines } from "./memory";
 import { seoKitLines } from "./seo-lines";
-import { brandFactsBlock, simpleLanguageRules } from "./style";
+import { brandFactsBlock, simpleLanguageRules, humanVoiceRules, voiceSampleLines } from "./style";
 
 const list = (items: string[] | null | undefined) => (items && items.length ? items.join(", ") : "not set");
 
@@ -46,6 +46,8 @@ export function brandSystemPrompt(brand: Brand, memory: string[] = []): string {
     ...seoKitLines(brand.seoKit),
     "",
     ...simpleLanguageRules(brand),
+    ...humanVoiceRules(),
+    ...voiceSampleLines(brand),
     ...memory,
   ].join("\n");
 }

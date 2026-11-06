@@ -150,6 +150,18 @@ export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["A
           />
           <p className="hint">True numbers and features. The AI only states facts from here and the campaign brief.</p>
         </div>
+        <div className="md:col-span-2">
+          <label className="label" htmlFor="voiceSamples">Your own posts (for your voice)</label>
+          <textarea
+            className="input"
+            id="voiceSamples"
+            name="voiceSamples"
+            rows={4}
+            defaultValue={brand?.voiceSamples ?? ""}
+            placeholder={"Paste 2-5 posts you wrote yourself, one after another.\nThe AI copies how you talk (words, length, emojis), not the text."}
+          />
+          <p className="hint">Makes every caption sound like you, not like an AI.</p>
+        </div>
         <div>
           <label className="label" htmlFor="keywords">SEO keywords</label>
           <input className="input" id="keywords" name="keywords" defaultValue={join(brand?.keywords)} placeholder="best sweets in vizag, diwali sweets" />

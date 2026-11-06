@@ -1,5 +1,6 @@
 import type { Brand, Campaign, Post } from "@/db/schema";
 import { CAPTION_RULES, HASHTAG_RULES } from "@/lib/formats";
+import { AI_PHRASES } from "./style";
 
 /*
  * Quality checker: the team member who checks every post before it reaches a human.
@@ -142,6 +143,14 @@ export function checkPost({ post, brand, campaign, siblings = [] }: QcInput): Qc
   }
   const hype = HYPE_WORDS.filter((w) => new RegExp(`\\b${w.replace(/[-\s]/g, "[-\\s]")}\\b`, "i").test(allText));
   if (hype.length) add({ code: "hype", level: "warn", message: `Hype words: ${hype.join(", ")}. Say plainly what the reader gets.`, fix: "rewrite" });
+  const aiPhrases = AI_PHRASES.filter((p) => allText.toLowerCase().includes(p));
+  if (aiPhrases.length) add({ code: "ai_phrases", level: "warn", message: `Sounds like AI: ${aiPhrases.slice(0, 4).map((p) => `"${p}"`).join(", ")}. Say it the way the owner would.`, fix: "rewrite" });
+  const emojis = (caption.match(/\p{Extended_Pictographic}/gu) ?? []).length;
+  const bangs = (caption.match(/!/g) ?? []).length;
+  const dashes = (caption.match(/—/g) ?? []).length;
+  if (emojis > 4 || bangs > 3 || dashes > 1) {
+    add({ code: "ai_style", level: "warn", message: `Feels machine-made: ${[emojis > 4 && `${emojis} emojis`, bangs > 3 && `${bangs} exclamation marks`, dashes > 1 && `${dashes} long dashes`].filter(Boolean).join(", ")}. Real owners write calmer.`, fix: "rewrite" });
+  }
   const risky = RISKY_CLAIMS.filter((r) => r.pattern.test(allText)).map((r) => r.label);
   if (risky.length) add({ code: "risky_claim", level: "fail", message: `Promises we can't prove: ${risky.join(", ")}.`, fix: "rewrite" });
 

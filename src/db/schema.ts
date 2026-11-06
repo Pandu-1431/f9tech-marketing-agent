@@ -164,6 +164,8 @@ export const brands = pgTable(
     visualStyle: text("visual_style"),
     // Approved facts about the business (numbers, features, dates). The only facts AI may state.
     keyFacts: text("key_facts"),
+    // A few of the owner's own past posts: the writers copy this voice.
+    voiceSamples: text("voice_samples"),
     // SEO kit: keywords people really search + hashtag sets, built from search suggestions (src/agent/seo.ts).
     seoKit: jsonb("seo_kit").$type<SeoKit | null>(),
     presenter: jsonb("presenter").$type<Presenter | null>(),

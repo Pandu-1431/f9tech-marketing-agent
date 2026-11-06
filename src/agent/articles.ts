@@ -42,6 +42,7 @@ export function articlePrompt(brand: Brand, topic: string, ctaUrl: string | null
     "- Then 4-6 sections with ## headings (use ### for sub-points), short paragraphs, bullet lists where they help.",
     "- Use the topic phrase naturally in the intro and one heading; use 2-3 related searches where they fit. No keyword stuffing.",
     "- Be genuinely useful: steps, examples, mistakes to avoid. Mention the business where it truly helps, not in every section.",
+    "- Write like a person who knows the subject, not like an AI: concrete examples, plain words, no filler intros, no phrases like \"in today's fast-paced world\", \"dive into\", \"unlock\", \"look no further\", no long dashes (—).",
     "- Only state facts about the business that are in its key facts. No made-up numbers, prices, awards or reviews.",
     `- End with a short ## section that invites the reader to act${ctaUrl ? ` with a Markdown link to ${ctaUrl}` : ""}.`,
     "- faq: 3-4 questions people also ask, with 1-3 sentence answers (these are NOT repeated in the body).",
