@@ -24,6 +24,7 @@ import { lastProviderFailure, campaignHistory, getBrand, getCampaign, isApproved
 import { publicUrl } from "@/lib/storage";
 import { formatSlot, utcToZoned } from "@/lib/schedule";
 import { campaignJobProblem } from "@/jobs/queue";
+import { openJobCount } from "@/jobs/heal";
 import type { Campaign, Post } from "@/db/schema";
 import { allowedFormats } from "@/agent/planner";
 import { campaignTypeLabel, FORMAT_LABELS } from "@/lib/campaign-types";
@@ -79,7 +80,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const [channels, publications] = await Promise.all([listChannels(workspace.id, campaign.brandId), campaignPublications(workspace.id, campaign.id)]);
   const channelPlatforms = new Set(channels.map((c) => c.platform));
   const makingVideos = posts.filter((p) => p.reelStatus === "making").length;
-  const problem = await campaignJobProblem(workspace.id, campaign.id);
+  const [problem, openJobs] = await Promise.all([campaignJobProblem(workspace.id, campaign.id), openJobCount(workspace.id, campaign.id)]);
   const designing = posts.filter((p) => p.status !== "idea" && (p.designStatus === "designing" || (campaign.status === "ready" && p.designStatus === "none")));
   const working =
     campaign.status === "planning" || campaign.status === "writing" || campaign.status === "draft" || posts.some((p) => p.status === "idea") || designing.length > 0 || makingVideos > 0;
@@ -150,13 +151,20 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       <CampaignPipeline campaign={campaign} posts={posts} />
       {(() => {
         const live = posts.filter((p) => p.status !== "idea" && p.status !== "published" && p.status !== "rejected");
-        const missing = live.filter((p) => p.designStatus === "failed" || (p.format === "reel" && (p.reelStatus === "failed" || (p.reelStatus === "none" && p.designStatus === "done")))).length;
-        return canEdit && missing > 0 && !working ? (
+        // "In progress" with no job behind it = stuck (a job gave up or the app restarted).
+        const stuck = working && openJobs === 0;
+        const missing = stuck
+          ? posts.filter((p) => p.status === "idea" || p.designStatus === "designing" || p.reelStatus === "making").length +
+            live.filter((p) => p.designStatus === "failed").length
+          : live.filter((p) => p.designStatus === "failed" || (p.format === "reel" && (p.reelStatus === "failed" || (p.reelStatus === "none" && p.designStatus === "done")))).length;
+        return canEdit && missing > 0 && (!working || stuck) ? (
           <form action={finishMissingMediaAction.bind(null, campaign.id)} className="flex flex-wrap items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-sm" data-testid="finish-missing">
             <span className="flex-1 text-indigo-900">
-              {missing} poster{missing === 1 ? "" : "s"} or video{missing === 1 ? "" : "s"} still missing. The team now waits for free AI limits and falls back to brand art, so this will work.
+              {stuck
+                ? `${missing} post${missing === 1 ? "" : "s"} paused (a free AI was busy). The team restarts them by itself within a few minutes, or click now.`
+                : `${missing} poster${missing === 1 ? "" : "s"} or video${missing === 1 ? "" : "s"} still missing. The team waits for free AI limits and falls back to brand art, so this will work.`}
             </span>
-            <button className="btn">Make the missing ones</button>
+            <button className="btn">{stuck ? "Restart now" : "Make the missing ones"}</button>
           </form>
         ) : null;
       })()}

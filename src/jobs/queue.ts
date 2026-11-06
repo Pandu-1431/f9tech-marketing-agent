@@ -35,6 +35,10 @@ async function claimNext(): Promise<Job | null> {
 async function runJob(job: Job): Promise<void> {
   const db = await getDb();
   const handler = handlers[job.type as keyof typeof handlers];
+  // Heartbeat: a long job (a reel, a poster waiting for a free AI) is never mistaken for a stuck one.
+  const beat = setInterval(() => {
+    void db.update(schema.jobs).set({ updatedAt: new Date() }).where(and(eq(schema.jobs.id, job.id), eq(schema.jobs.status, "running"))).catch(() => {});
+  }, 60_000);
   try {
     if (!handler) throw new Error(`Unknown job type: ${job.type}`);
     await handler(job.payload);
@@ -56,6 +60,8 @@ async function runJob(job: Job): Promise<void> {
       const onFail = handlers[job.type as keyof typeof handlers]?.onFinalFailure;
       await onFail?.(job.payload, message);
     }
+  } finally {
+    clearInterval(beat);
   }
 }
 
@@ -69,6 +75,32 @@ export async function processJobs(max = 50): Promise<number> {
     ran++;
   }
   return ran;
+}
+
+/**
+ * Keeps up to AGENT_JOB_LANES jobs running at the same time (default 3), so one slow job
+ * (a reel, or a poster waiting for a free AI's turn) never holds up everything else.
+ * Called every few seconds; it only starts lanes that are free and never waits for them.
+ */
+const lanes = globalThis as unknown as { __agentLanes?: number };
+export function fillJobLanes(max = Math.max(1, Number(process.env.AGENT_JOB_LANES ?? 3))): void {
+  lanes.__agentLanes ??= 0;
+  while (lanes.__agentLanes < max) {
+    lanes.__agentLanes++;
+    void (async () => {
+      try {
+        for (let i = 0; i < 25; i++) {
+          const job = await claimNext();
+          if (!job) break;
+          await runJob(job);
+        }
+      } catch (err) {
+        console.error("[agent worker]", err);
+      } finally {
+        lanes.__agentLanes = (lanes.__agentLanes ?? 1) - 1;
+      }
+    })();
+  }
 }
 
 export async function pendingJobCount(workspaceId: number): Promise<number> {
@@ -138,8 +170,10 @@ export function startInlineWorker(everyMs = 3000) {
         await queueDueAutopilots();
         const { queueDuePublications } = await import("@/agent/publish");
         await queueDuePublications();
+        const { healStuckWork } = await import("./heal");
+        await healStuckWork();
       }
-      await processJobs(20);
+      fillJobLanes();
     } catch (err) {
       console.error("[agent worker]", err);
     } finally {
