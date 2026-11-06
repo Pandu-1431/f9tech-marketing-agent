@@ -5,6 +5,8 @@ import { createBrand } from "@/lib/data";
 import { runAutopilot } from "@/agent/autopilot";
 import { directorPlanPrompt, makeMarketingPlan, planExpired, planWeekFor, planWeeks, reviewLastWeek } from "@/agent/director";
 import { listMemory } from "@/agent/memory";
+import { growthSummary } from "@/lib/growth";
+import { teamStatus } from "@/lib/team-status";
 import { freshDb, makeWorkspace } from "./helpers";
 
 const MONDAY_RUN = new Date("2026-11-09T00:30:00Z"); // Monday 9 Nov 2026, 06:00 IST
@@ -79,5 +81,18 @@ describe("marketing director", () => {
     expect(lines.map((l) => l.text)).toEqual(["Approve posts early in the week so they go out on time"]);
     const all = await db.select().from(schema.memory).where(and(eq(schema.memory.brandId, brandId), eq(schema.memory.source, "director")));
     expect(all).toHaveLength(1);
+  });
+
+  it("shows the Director and the new agents on the dashboard", async () => {
+    const { ws, brandId, db } = await setup();
+    await makeMarketingPlan(ws.id, brandId);
+    const brands = await db.select().from(schema.brands).where(eq(schema.brands.workspaceId, ws.id));
+    const g = await growthSummary(ws.id, brands);
+    expect(g.directed).toHaveLength(1);
+    expect(g.directed[0].objective).toBe("leads");
+    expect(g.directed[0].week?.theme).toBeTruthy();
+    const team = await teamStatus(ws.id);
+    expect(team.agents.map((a) => a.key)).toEqual(["director", "researcher", "strategist", "copywriter", "designer", "video", "checker", "publisher", "community", "blogger", "analyst"]);
+    expect(team.activity.some((x) => x.agent === "director" && x.text === "wrote a 4-week marketing plan")).toBe(true);
   });
 });

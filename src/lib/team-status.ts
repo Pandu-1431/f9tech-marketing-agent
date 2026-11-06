@@ -2,20 +2,24 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 
 /*
- * The AI marketing team as people see it: six agents, each with what it is doing now,
+ * The AI marketing team as people see it: eleven agents, each with what it is doing now,
  * how much it did today and its last piece of work. Read from the job queue and the
  * generations log (both are per workspace, so nothing leaks between workspaces).
  */
 
-export type AgentKey = "strategist" | "copywriter" | "designer" | "video" | "checker" | "publisher" | "analyst";
+export type AgentKey = "director" | "researcher" | "strategist" | "copywriter" | "designer" | "video" | "checker" | "publisher" | "community" | "blogger" | "analyst";
 
 export const AGENTS: { key: AgentKey; name: string; role: string; emoji: string; color: string; jobs: string[]; purposes: string[] }[] = [
+  { key: "director", name: "Marketing Director", role: "Turns your goal into a 4-week plan and reviews it every week", emoji: "🧠", color: "#4f46e5", jobs: ["director.plan"], purposes: ["marketing_plan", "weekly_review"] },
+  { key: "researcher", name: "Brand researcher", role: "Reads your website and finds what customers search", emoji: "🔎", color: "#0891b2", jobs: ["brand.seo"], purposes: ["brand_from_site", "seo_kit"] },
   { key: "strategist", name: "Strategist", role: "Picks the weekly theme and plans the calendar", emoji: "🧭", color: "#6366f1", jobs: ["autopilot.run", "campaign.plan"], purposes: ["weekly_theme", "campaign_plan"] },
   { key: "copywriter", name: "Copywriter", role: "Writes captions, hashtags and poster lines", emoji: "✍️", color: "#8b5cf6", jobs: ["campaign.write", "post.rewrite"], purposes: ["post_copy", "post_copy_batch"] },
   { key: "designer", name: "Poster designer", role: "Makes on-brand posters in Indian style", emoji: "🎨", color: "#db2777", jobs: ["campaign.design", "post.design"], purposes: ["post_background"] },
   { key: "video", name: "Video maker", role: "Turns posts into reels with voice and music", emoji: "🎬", color: "#f59e0b", jobs: ["post.reel"], purposes: ["reel_script", "reel_scene", "reel_voiceover", "reel"] },
   { key: "checker", name: "Quality checker", role: "Checks spelling, brand rules and safe zones", emoji: "🛡️", color: "#10b981", jobs: [], purposes: [] },
   { key: "publisher", name: "Publisher", role: "Posts approved work on time, everywhere", emoji: "🚀", color: "#0ea5e9", jobs: ["post.publish"], purposes: [] },
+  { key: "community", name: "Community manager", role: "Reads comments and drafts replies for you", emoji: "💬", color: "#e11d48", jobs: ["community.read"], purposes: ["comment_reply"] },
+  { key: "blogger", name: "Blog writer", role: "Writes website articles people find on Google", emoji: "📝", color: "#7c3aed", jobs: ["article.write"], purposes: ["blog_article", "article_cover"] },
   { key: "analyst", name: "Analyst", role: "Reads post results and teaches the team what works", emoji: "📈", color: "#14b8a6", jobs: ["analyst.run"], purposes: [] },
 ];
 
@@ -43,6 +47,14 @@ const PURPOSE_TEXT: Record<string, string> = {
   reel_scene: "made a reel scene",
   reel_voiceover: "recorded a voiceover",
   reel: "finished a reel video",
+  marketing_plan: "wrote a 4-week marketing plan",
+  weekly_review: "reviewed last week's results",
+  brand_from_site: "read a website and filled the Brand Kit",
+  seo_kit: "found what customers search",
+  comment_reply: "drafted a reply to a comment",
+  blog_article: "wrote a blog article",
+  article_cover: "made an article cover",
+  edit_lesson: "learned a rule from your edit",
 };
 
 function agentForPurpose(purpose: string): AgentKey {

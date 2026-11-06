@@ -16,6 +16,8 @@ import { FuelGauge } from "@/components/ui/fuel-gauge";
 import { CountUp } from "@/components/ui/count-up";
 import { StatusBadge } from "@/components/status-badge";
 import { reviewCount } from "@/lib/review";
+import { growthSummary } from "@/lib/growth";
+import { OBJECTIVES } from "@/agent/director";
 
 function Meter({ label, used, max, color }: { label: string; used: number; max: number; color: string }) {
   const pct = Math.min(100, Math.round((used / Math.max(1, max)) * 100));
@@ -57,6 +59,7 @@ export default async function DashboardPage() {
   ]);
   const brands = await listBrands(workspace.id);
   const autopilotOn = brands.filter((b) => b.autopilotEnabled);
+  const growth = await growthSummary(workspace.id, brands);
   const workingNow = team.agents.filter((a) => a.working);
 
   return (
@@ -123,6 +126,65 @@ export default async function DashboardPage() {
           <Link href="/brands/new" className="btn mt-3">Add business account</Link>
         </div>
       )}
+
+      <section className="card space-y-4" data-testid="growth-card">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold">Growth</h2>
+            <p className="text-sm text-zinc-500">Goals, leads, comments and articles across your businesses.</p>
+          </div>
+          {canEdit && (
+            <div className="flex flex-wrap gap-2">
+              <Link href="/brands/new" className="btn-secondary">✨ Add a business from its website</Link>
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Link href="/leads" className="rounded-xl border border-zinc-200 p-3 text-center hover:bg-zinc-50">
+            <p className="text-2xl font-bold">{growth.leadsMonth}</p>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Leads this month</p>
+            {growth.newLeads > 0 && <p className="text-xs font-semibold text-fuchsia-700">{growth.newLeads} new to call</p>}
+          </Link>
+          <Link href="/inbox" className="rounded-xl border border-zinc-200 p-3 text-center hover:bg-zinc-50">
+            <p className="text-2xl font-bold">{growth.comments}</p>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Comments to answer</p>
+          </Link>
+          <div className="rounded-xl border border-zinc-200 p-3 text-center">
+            <p className="text-2xl font-bold">{growth.articlesMonth}</p>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Blog articles this month</p>
+          </div>
+          <div className="rounded-xl border border-zinc-200 p-3 text-center">
+            <p className="text-2xl font-bold">{growth.directed.length}</p>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Businesses with a goal</p>
+          </div>
+        </div>
+        {brands.length > 0 && (
+          <ul className="divide-y divide-zinc-100 text-sm">
+            {brands.map((b) => {
+              const d = growth.directed.find((x) => x.id === b.id);
+              return (
+                <li key={b.id} className="flex flex-wrap items-center gap-2 py-2">
+                  <b>{b.name}</b>
+                  {d ? (
+                    <span className="text-zinc-600">
+                      🧠 {OBJECTIVES.find((o) => o.key === d.objective)?.label}
+                      {d.week ? <> · this week: <i>{d.week.theme}</i></> : " · plan being written"}
+                    </span>
+                  ) : (
+                    <span className="text-zinc-400">No goal yet</span>
+                  )}
+                  <span className="ml-auto flex flex-wrap gap-1.5">
+                    <Link href={`/brands/${b.id}#director`} className="badge border border-indigo-200 bg-indigo-50 text-indigo-700">{d ? "Director" : "Set a goal"}</Link>
+                    <Link href={`/brands/${b.id}/articles`} className="badge border border-zinc-200 bg-white text-zinc-600">Blog</Link>
+                    <Link href={`/reports/${b.id}`} className="badge border border-zinc-200 bg-white text-zinc-600">Report</Link>
+                    <Link href={`/brands/${b.id}#enquiry`} className="badge border border-zinc-200 bg-white text-zinc-600">Enquiry page</Link>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section>
         <div className="mb-3 flex items-end justify-between">
