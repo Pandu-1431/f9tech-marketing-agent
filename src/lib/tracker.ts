@@ -26,6 +26,8 @@ export type TrackerRow = {
   shares: number;
   saves: number;
   views: number;
+  /** Clicks on the post's tracked link. */
+  clicks: number;
   score: number;
 };
 
@@ -46,6 +48,7 @@ export const TRACKER_COLUMNS: { key: keyof TrackerRow; label: string }[] = [
   { key: "shares", label: "Shares" },
   { key: "saves", label: "Saves" },
   { key: "views", label: "Views" },
+  { key: "clicks", label: "Link clicks" },
   { key: "score", label: "Score" },
 ];
 
@@ -79,7 +82,7 @@ export async function trackerRows(workspaceId: number, f: TrackerFilter = {}): P
   ]);
   const link = new Map<number, string>();
   for (const p of pubs) if (p.url && !link.has(p.postId)) link.set(p.postId, p.url);
-  const sum = new Map<number, Omit<TrackerRow, "postId" | "date" | "time" | "brand" | "campaign" | "platform" | "format" | "status" | "headline" | "caption" | "link">>();
+  const sum = new Map<number, Omit<TrackerRow, "postId" | "date" | "time" | "brand" | "campaign" | "platform" | "format" | "status" | "headline" | "caption" | "link" | "clicks">>();
   for (const m of metrics) {
     const s = sum.get(m.postId) ?? { reach: 0, likes: 0, comments: 0, shares: 0, saves: 0, views: 0, score: 0 };
     s.reach += m.reach;
@@ -92,6 +95,8 @@ export async function trackerRows(workspaceId: number, f: TrackerFilter = {}): P
     sum.set(m.postId, s);
   }
 
+  const { clicksByPost } = await import("./links");
+  const clicks = await clicksByPost(workspaceId, f.brandId);
   return rows.map(({ post, brand, campaign }) => {
     const tz = isValidTimeZone(post.timezone) ? post.timezone : DEFAULT_TIMEZONE;
     const time = post.scheduledAt ? utcToZoned(post.scheduledAt, tz).time : "";
@@ -108,6 +113,7 @@ export async function trackerRows(workspaceId: number, f: TrackerFilter = {}): P
       caption: (post.caption ?? "").replace(/\s+/g, " ").trim(),
       link: link.get(post.id) ?? "",
       ...(sum.get(post.id) ?? { reach: 0, likes: 0, comments: 0, shares: 0, saves: 0, views: 0, score: 0 }),
+      clicks: clicks.get(post.id) ?? 0,
     };
   });
 }

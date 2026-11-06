@@ -204,7 +204,13 @@ async function weekResults(workspaceId: number, brandId: number, week: PlanWeek)
   const ids = inWeek.map((p) => p.id);
   const metrics = ids.length ? await db.select().from(schema.postMetrics).where(and(eq(schema.postMetrics.workspaceId, workspaceId), inArray(schema.postMetrics.postId, ids))) : [];
   const sum = (k: "reach" | "likes" | "comments" | "shares" | "clicks" | "views") => metrics.reduce((a, m) => a + (Number(m[k]) || 0), 0);
+  const from = new Date(`${week.start}T00:00:00Z`);
+  const to = new Date(Date.parse(`${week.end}T00:00:00Z`) + 86400000);
+  const { leadsBetween } = await import("@/lib/leads");
+  const { clicksBetween } = await import("@/lib/links");
   return {
+    leads: await leadsBetween(workspaceId, brandId, from, to),
+    linkClicks: await clicksBetween(workspaceId, brandId, from, to),
     planned: inWeek.length,
     approved: inWeek.filter((p) => p.status === "approved" || p.status === "published").length,
     published: inWeek.filter((p) => p.status === "published").length,
@@ -217,7 +223,7 @@ export function reviewPrompt(plan: MarketingPlan, week: PlanWeek, r: Awaited<Ret
     "TASK: WEEKLY_REVIEW",
     `LAST WEEK: ${week.start} to ${week.end}, theme "${week.theme}"`,
     `KPI TARGETS: ${plan.kpis.map((k) => `${k.metric}: ${k.target}`).join("; ") || "none"}`,
-    `LAST WEEK'S NUMBERS: ${r.planned} posts planned, ${r.approved} approved, ${r.published} published; reach ${r.reach}, likes ${r.likes}, comments ${r.comments}, shares ${r.shares}, clicks ${r.clicks}, video views ${r.views}.`,
+    `LAST WEEK'S NUMBERS: ${r.planned} posts planned, ${r.approved} approved, ${r.published} published; reach ${r.reach}, likes ${r.likes}, comments ${r.comments}, shares ${r.shares}, clicks ${r.clicks}, video views ${r.views}; tracked link clicks ${r.linkClicks}, new leads ${r.leads}.`,
     ...performanceLines(perf),
     "",
     "You are the marketing director. Review last week against the targets in 2-3 plain sentences (what worked, what did not, why).",

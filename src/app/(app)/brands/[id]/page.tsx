@@ -8,6 +8,10 @@ import { MemorySection } from "@/components/memory-section";
 import { SeoSection } from "@/components/seo-section";
 import { PresenterSection } from "@/components/presenter-section";
 import { DirectorSection } from "@/components/director-section";
+import { EnquirySection } from "@/components/enquiry-section";
+import { leadCodeFor, leadsSince } from "@/lib/leads";
+import { clicksSince, trackingBase } from "@/lib/links";
+import { headers } from "next/headers";
 import { directorJobState, planCampaigns } from "@/agent/director";
 import { seoJobState } from "@/agent/seo";
 import { listMemory } from "@/agent/memory";
@@ -50,6 +54,13 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
       <DirectorSection brand={brand} job={await directorJobState(workspace.id, brand.id)} campaigns={await planCampaigns(workspace.id, brand.id, brand.marketingPlan)} />
       <AutopilotForm brand={brand} />
       <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} youtubeReady={googleConfigured()} youtubeStatus={youtube} gbpStatus={gbp} sheetsStatus={sheets} />
+      <EnquirySection
+        brand={brand}
+        url={`${(process.env.APP_URL ?? `http://${(await headers()).get("host") ?? "localhost:3000"}`).replace(/\/$/, "")}/l/${await leadCodeFor(workspace.id, brand.id)}`}
+        leads30={await leadsSince(workspace.id, brand.id, new Date(Date.now() - 30 * 86400000))}
+        clicks30={await clicksSince(workspace.id, brand.id, new Date(Date.now() - 30 * 86400000))}
+        tracking={Boolean(trackingBase())}
+      />
       <PresenterSection brand={brand} status={presenter} />
       <SeoSection brand={brand} job={await seoJobState(workspace.id, brand.id)} />
       <MemorySection brand={brand} memory={await listMemory(workspace.id, brand.id)} measured={Number(measured?.n ?? 0)} />

@@ -7,10 +7,11 @@ import { switchWorkspaceAction } from "@/app/actions/team";
 import { NavLinks } from "@/components/ui/nav-links";
 import { Wordmark } from "@/components/ui/logo";
 import { reviewCount } from "@/lib/review";
+import { newLeadCount } from "@/lib/leads";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, workspace, role } = await requireAuth();
-  const [trial, myWorkspaces, waiting] = await Promise.all([trialInfo(workspace.id), listMyWorkspaces(user.id), reviewCount(workspace.id)]);
+  const [trial, myWorkspaces, waiting, newLeads] = await Promise.all([trialInfo(workspace.id), listMyWorkspaces(user.id), reviewCount(workspace.id), newLeadCount(workspace.id)]);
 
   const review = { href: "/review", label: "Review", count: waiting };
   const links = [
@@ -22,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ...(role === "client" ? [] : [review]),
     { href: "/calendar", label: "Calendar" },
     { href: "/library", label: "Library" },
+    { href: "/leads", label: "Leads", count: newLeads },
     { href: "/tracker", label: "Tracker" },
     ...(canEditContent(role) ? [{ href: "/settings/ai", label: "AI connections" }] : []),
     ...(canManageTeam(role) ? [{ href: "/settings/team", label: "Team" }] : []),

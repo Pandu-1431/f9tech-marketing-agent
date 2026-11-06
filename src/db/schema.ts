@@ -170,10 +170,12 @@ export const brands = pgTable(
     // Marketing Director: the goal and the current four-week plan (src/agent/director.ts).
     marketingGoal: jsonb("marketing_goal").$type<MarketingGoal | null>(),
     marketingPlan: jsonb("marketing_plan").$type<MarketingPlan | null>(),
+    // Public enquiry page: /l/<leadCode>.
+    leadCode: varchar("lead_code", { length: 16 }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("brands_ws").on(t.workspaceId)],
+  (t) => [index("brands_ws").on(t.workspaceId), uniqueIndex("brands_lead_code").on(t.leadCode)],
 );
 
 export const campaigns = pgTable(
@@ -580,3 +582,69 @@ export const providerState = pgTable(
 
 export type BrandMemory = typeof memory.$inferSelect;
 export type PostMetric = typeof postMetrics.$inferSelect;
+
+// Leads (CRM): enquiries from the public enquiry page, or added by hand (calls, DMs).
+export const leads = pgTable(
+  "leads",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => brands.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    phone: varchar("phone", { length: 30 }),
+    email: varchar("email", { length: 160 }),
+    message: text("message"),
+    // Where it came from: "enquiry page", a platform ("instagram"), or "manual".
+    source: varchar("source", { length: 60 }).default("enquiry page").notNull(),
+    postId: integer("post_id"),
+    // new | contacted | won | lost
+    status: varchar("status", { length: 12 }).default("new").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("leads_ws_status").on(t.workspaceId, t.status), index("leads_brand").on(t.brandId)],
+);
+
+// Tracking links: /r/<code> counts a click, then sends the visitor to the target (with UTM tags).
+export const links = pgTable(
+  "links",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => brands.id, { onDelete: "cascade" }),
+    postId: integer("post_id"),
+    campaignId: integer("campaign_id"),
+    platform: varchar("platform", { length: 30 }).notNull(),
+    code: varchar("code", { length: 16 }).notNull(),
+    target: text("target").notNull(),
+    clicks: integer("clicks").default(0).notNull(),
+    lastClickAt: timestamp("last_click_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("links_code").on(t.code), index("links_post").on(t.postId)],
+);
+
+export const linkClicks = pgTable(
+  "link_clicks",
+  {
+    id: serial("id").primaryKey(),
+    linkId: integer("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    workspaceId: integer("workspace_id").notNull(),
+    at: timestamp("at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("link_clicks_ws_at").on(t.workspaceId, t.at)],
+);
+
+export type Lead = typeof leads.$inferSelect;
+export type TrackingLink = typeof links.$inferSelect;

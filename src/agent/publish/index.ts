@@ -3,6 +3,7 @@ import { getDb, schema } from "@/db";
 import type { Channel } from "@/db/schema";
 import { getFile, mimeFromKey, publicUrl } from "@/lib/storage";
 import { isApprovedForPublish } from "@/lib/data";
+import { swapLinks, trackedUrl } from "@/lib/links";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { publishFacebook, publishInstagram, testFacebook, testInstagram } from "./meta";
 import { publishTelegram, testTelegram } from "./telegram";
@@ -135,11 +136,14 @@ export async function sendPublication(workspaceId: number, publicationId: number
     const text = [version.caption ?? "", version.hashtags.join(" ")].filter(Boolean).join("\n\n").trim();
     const video = post?.format === "reel" ? await media(version.videoAssetId) : null;
     const image = video || post?.format === "text" ? null : await media(version.posterAssetId);
-    const [campaign] = post ? await db.select({ ctaUrl: schema.campaigns.ctaUrl }).from(schema.campaigns).where(eq(schema.campaigns.id, post.campaignId)) : [];
-    const [brand] = post ? await db.select({ language: schema.brands.language }).from(schema.brands).where(eq(schema.brands.id, post.brandId)) : [];
+    const [campaign] = post ? await db.select({ ctaUrl: schema.campaigns.ctaUrl, theme: schema.campaigns.theme }).from(schema.campaigns).where(eq(schema.campaigns.id, post.campaignId)) : [];
+    const [brand] = post ? await db.select({ language: schema.brands.language, website: schema.brands.website }).from(schema.brands).where(eq(schema.brands.id, post.brandId)) : [];
+    // The post's link becomes a tracked one (UTM tags; a counting short link when the app is public).
+    const target = campaign?.ctaUrl || brand?.website || null;
+    const link = target && post ? await trackedUrl({ workspaceId, brandId: post.brandId, postId: post.id, campaignId: post.campaignId, campaignTheme: campaign?.theme, platform: channel.platform, target }) : null;
     const result = await ADAPTERS[channel.platform as ChannelPlatform].publish(
       { token: decryptSecret(channel.secret), config: channel.config },
-      { text, image, video, link: campaign?.ctaUrl ?? null, language: languageCode(brand?.language) },
+      { text: link ? swapLinks(text, [campaign?.ctaUrl ?? "", brand?.website ?? ""], link) : text, image, video, link, language: languageCode(brand?.language) },
     );
     await db
       .update(schema.publications)
