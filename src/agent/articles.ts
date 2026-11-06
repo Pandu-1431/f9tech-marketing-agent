@@ -61,6 +61,8 @@ const articleSchema = z.object({
   faq: z.array(z.object({ q: z.string(), a: z.string() })).default([]),
 });
 
+const MIN_WORDS = 600;
+
 export const slugify = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 
 export async function startArticle(workspaceId: number, brandId: number, topic: string): Promise<Article> {
@@ -82,7 +84,25 @@ export async function writeArticle(workspaceId: number, articleId: number): Prom
       { workspaceId, brandId: brand.id, purpose: "blog_article", subject: { type: "article", id: a.id } },
       { system: await brandSystemPromptWithMemory(brand), prompt: articlePrompt(brand, a.topic, ctaUrl), json: true, temperature: 0.6 },
     );
-    const p = articleSchema.parse(parseJsonObject(out.text));
+    let p = articleSchema.parse(parseJsonObject(out.text));
+    // Free models often stop short: ask once more for a fuller article, keep the longer one.
+    if (wordCount(p.body) < MIN_WORDS) {
+      try {
+        const again = await generateText(
+          { workspaceId, brandId: brand.id, purpose: "blog_article", subject: { type: "article", id: a.id } },
+          {
+            system: await brandSystemPromptWithMemory(brand),
+            prompt: `${articlePrompt(brand, a.topic, ctaUrl)}\n\nIMPORTANT: your last draft had only ${wordCount(p.body)} words. Write at least 900 words: more sections, concrete steps and examples.`,
+            json: true,
+            temperature: 0.6,
+          },
+        );
+        const longer = articleSchema.parse(parseJsonObject(again.text));
+        if (wordCount(longer.body) > wordCount(p.body)) p = longer;
+      } catch {
+        // keep the first draft
+      }
+    }
     const body = p.body.replace(/^#\s+.*\n+/, ""); // the title is shown separately
     let coverKey: string | null = null;
     try {
