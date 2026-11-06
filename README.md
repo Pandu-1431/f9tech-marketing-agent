@@ -88,6 +88,7 @@ tests/                 vitest: tenant isolation, limits, router, pipeline
 - [x] Layer 2 — Model Router (Gemini, Groq, OpenRouter, local), campaign planner, copywriter, review/approve
 - [x] Layer 3 — Design studio: logo upload, AI backgrounds (Cloudflare / Hugging Face / offline), poster templates with logo + headline + button, per-platform sizes, asset library, 21-day free trial
 - [x] Video Studio — reel script → scene images → voice (Cloudflare MeloTTS / Piper / silent) → subtitles, logo, progress bar → slow zoom, fades, music → 1080×1920 MP4
+- [x] Video styles — AI presenter (one face per business, or your own photo), theme, concept (problem → idea → result), text-only typography; camera moves, sliding text, style transitions; "Make all 4 styles" and pick the version to publish
 - [x] AI connections page — status of every provider, where to get each free key, one-click Test
 - [x] Training center — the team learns from people: approved posts become few-shot examples in every copy prompt, a person's edit becomes a brand rule (one small AI call on approval), and approvals/edits/rejections export as SFT + DPO JSONL for optional fine-tuning (`/brands/<id>/training`)
 - [x] Layer 4 — SEO + SMO: SEO kit per business (Google + YouTube autocomplete → keyword clusters with intent, questions, brand/niche/local/broad hashtag sets, used by every caption), best time to post from results, Google Business Profile posts

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Brand, Campaign, Post, ReelScript } from "@/db/schema";
+import type { Brand, Campaign, Post, ReelScene, ReelScript, ReelStyle } from "@/db/schema";
+import { styleScriptLines } from "./styles";
 import { brandSystemPromptWithMemory } from "../brand-context";
 import { parseJsonObject } from "../json";
 import { generateText } from "../router";
@@ -14,14 +15,17 @@ const schema = z.object({
         on_screen: z.string().default(""),
         image_prompt: z.string().default(""),
         shot: z.coerce.number().int().optional().nullable(),
+        kind: z.string().optional().nullable(),
+        step: z.string().optional().nullable(),
       }),
     )
     .min(2)
     .max(8),
   cta: z.string().default(""),
+  look: z.string().optional().nullable(),
 });
 
-export function reelPrompt(campaign: Campaign, post: Post, shots: string[] = []): string {
+export function reelPrompt(campaign: Campaign, post: Post, shots: string[] = [], style: ReelStyle = "classic", presenterName?: string): string {
   return [
     "TASK: REEL_SCRIPT",
     `CAMPAIGN THEME: ${campaign.theme}`,
@@ -39,6 +43,8 @@ export function reelPrompt(campaign: Campaign, post: Post, shots: string[] = [])
     "- on_screen: big text shown on screen, max 6 words, the key point of the scene.",
     "- image_prompt: one realistic vertical photo for the scene, set in India with Indian people and places where people appear (subject, setting, mood). No text in the image.",
     "- Only use facts from the brand key facts and the campaign brief.",
+    "",
+    ...styleScriptLines(style, presenterName),
     ...(shots.length
       ? [
           "",
@@ -48,31 +54,57 @@ export function reelPrompt(campaign: Campaign, post: Post, shots: string[] = [])
         ]
       : []),
     "- cta: 2-4 word button text for the last scene (e.g. \"Order on WhatsApp\").",
-    'Reply with JSON only: {"title": "...", "scenes": [{"voiceover": "...", "on_screen": "...", "image_prompt": "...", "shot": null}], "cta": "..."}',
+    'Reply with JSON only: {"title": "...", "look": "...", "scenes": [{"kind": "broll", "step": "", "voiceover": "...", "on_screen": "...", "image_prompt": "...", "shot": null}], "cta": "..."}',
   ].join("\n");
 }
 
 /** Post -> reel script (scenes with voiceover, on-screen text and image prompts). */
-export async function writeReelScript(campaign: Campaign, brand: Brand, post: Post, shots: string[] = []): Promise<ReelScript> {
-  return (await writeReelScriptWithProvider(campaign, brand, post, shots)).script;
+export async function writeReelScript(campaign: Campaign, brand: Brand, post: Post, shots: string[] = [], style: ReelStyle = "classic"): Promise<ReelScript> {
+  return (await writeReelScriptWithProvider(campaign, brand, post, shots, style)).script;
+}
+
+const KINDS = ["presenter", "broll", "text"] as const;
+
+/** The model's scene kind, made consistent with the style (a text video has only text scenes, etc.). */
+export function sceneKind(style: ReelStyle, raw: string | null | undefined, i: number, count: number): NonNullable<ReelScene["kind"]> {
+  if (style === "text") return "text";
+  if (style === "presenter") {
+    if (i === 0 || i === count - 1) return "presenter";
+    const k = (KINDS as readonly string[]).includes(raw ?? "") ? (raw as NonNullable<ReelScene["kind"]>) : null;
+    return k === "presenter" || k === "broll" ? k : i % 2 === 0 ? "presenter" : "broll";
+  }
+  return "broll";
 }
 
 /** Same as writeReelScript, plus which text provider wrote it (to label demo output). */
-export async function writeReelScriptWithProvider(campaign: Campaign, brand: Brand, post: Post, shots: string[] = []): Promise<{ script: ReelScript; provider: string }> {
+export async function writeReelScriptWithProvider(
+  campaign: Campaign,
+  brand: Brand,
+  post: Post,
+  shots: string[] = [],
+  style: ReelStyle = "classic",
+): Promise<{ script: ReelScript; provider: string }> {
   const out = await generateText(
     { workspaceId: post.workspaceId, brandId: brand.id, purpose: "reel_script", subject: { type: "post", id: post.id } },
-    { system: await brandSystemPromptWithMemory(brand), prompt: reelPrompt(campaign, post, shots), json: true, temperature: 0.8 },
+    { system: await brandSystemPromptWithMemory(brand), prompt: reelPrompt(campaign, post, shots, style, brand.presenter?.name), json: true, temperature: 0.8 },
   );
   const s = schema.parse(parseJsonObject(out.text));
   const script: ReelScript = {
     title: s.title || campaign.theme,
-    scenes: s.scenes.slice(0, 6).map((sc) => ({
-      voiceover: sc.voiceover.trim(),
-      onScreen: sc.on_screen.trim().slice(0, 60),
-      imagePrompt: sc.image_prompt.trim(),
-      ...(sc.shot && sc.shot >= 1 && sc.shot <= shots.length ? { shot: sc.shot } : {}),
-    })),
+    scenes: s.scenes.slice(0, 6).map((sc, i, all) => {
+      const kind = sceneKind(style, sc.kind, i, all.length);
+      return {
+        voiceover: sc.voiceover.trim(),
+        onScreen: (sc.on_screen.trim() || (kind === "text" ? sc.voiceover.trim().split(/\s+/).slice(0, 5).join(" ") : "")).slice(0, 60),
+        imagePrompt: sc.image_prompt.trim(),
+        kind,
+        ...(style === "concept" && sc.step?.trim() ? { step: sc.step.trim().slice(0, 24) } : {}),
+        ...(kind === "broll" && sc.shot && sc.shot >= 1 && sc.shot <= shots.length ? { shot: sc.shot } : {}),
+      };
+    }),
     cta: (s.cta || post.posterCta || "Order now").slice(0, 40),
+    style,
+    ...(style === "theme" && s.look?.trim() ? { look: s.look.trim().slice(0, 200) } : {}),
   };
   return { script, provider: out.provider };
 }

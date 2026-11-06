@@ -20,8 +20,22 @@ import {
  */
 
 export type QcIssue = { code: string; level: "fail" | "warn"; message: string; fix?: "rewrite" | "hashtags" };
-export type ReelScene = { voiceover: string; onScreen: string; imagePrompt: string; /** 1-based product shot to show instead of an AI image. */ shot?: number };
-export type ReelScript = { title: string; scenes: ReelScene[]; cta: string; voice?: string; durationSec?: number; /** Cover image (thumbnail) for the reel. */ coverKey?: string };
+export type ReelScene = {
+  voiceover: string;
+  onScreen: string;
+  imagePrompt: string;
+  /** 1-based product shot to show instead of an AI image. */
+  shot?: number;
+  /** presenter = the brand's AI presenter talks to camera; text = big words on brand colours; broll = a scene photo. */
+  kind?: "presenter" | "broll" | "text";
+  /** Concept videos: the step label (e.g. "The problem"). */
+  step?: string;
+};
+/** Video styles: classic slideshow, AI presenter, theme-based, concept explainer, text-only. */
+export type ReelStyle = "classic" | "presenter" | "theme" | "concept" | "text";
+/** The brand's AI presenter (one face reused in every presenter video), or an uploaded real photo. */
+export type Presenter = { faceKey: string; name: string; source: "ai" | "upload" };
+export type ReelScript = { title: string; scenes: ReelScene[]; cta: string; voice?: string; durationSec?: number; /** Cover image (thumbnail) for the reel. */ coverKey?: string; style?: ReelStyle; /** Theme videos: one visual look shared by every scene. */ look?: string };
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -139,6 +153,7 @@ export const brands = pgTable(
     keyFacts: text("key_facts"),
     // SEO kit: keywords people really search + hashtag sets, built from search suggestions (src/agent/seo.ts).
     seoKit: jsonb("seo_kit").$type<SeoKit | null>(),
+    presenter: jsonb("presenter").$type<Presenter | null>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -238,6 +253,8 @@ export const posts = pgTable(
     qcCheckedAt: timestamp("qc_checked_at", { withTimezone: true }),
     currentVersion: integer("current_version").default(0).notNull(),
     approvedVersion: integer("approved_version"),
+    // The video version a person picked ("Use this"); null = the newest video.
+    videoChoice: integer("video_choice"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -356,6 +373,8 @@ export const assets = pgTable(
     bytes: integer("bytes").default(0).notNull(),
     prompt: text("prompt"),
     provider: varchar("provider", { length: 40 }),
+    // Videos: which style made it (ReelStyle).
+    style: varchar("style", { length: 20 }),
     // true = made (fully or partly) by the demo generator; shown with a DEMO label.
     demo: boolean("demo").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

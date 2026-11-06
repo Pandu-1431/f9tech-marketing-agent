@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAuth, requireEditor } from "@/lib/auth";
 import {
+  chooseVideo,
   createCampaign,
   DemoContentError,
   getCampaign,
@@ -27,6 +28,8 @@ import type { FormState } from "./auth";
 import { qualityGate } from "@/agent/quality-gate";
 import { POSTER_TEMPLATES } from "@/agent/images/poster";
 import { FORMATS } from "@/agent/planner";
+import { isReelStyle, MULTI_STYLES } from "@/agent/video/styles";
+import type { ReelStyle } from "@/db/schema";
 import { CAMPAIGN_TYPE_KEYS, type CampaignType } from "@/lib/campaign-types";
 
 /** In dev / single-server mode, run queued jobs right after the response. */
@@ -200,12 +203,14 @@ export async function editPosterTextAction(postId: number, formData: FormData) {
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
 
-export async function makeReelAction(postId: number) {
+/** Make a reel in one style, or "all" = one video per style (presenter, theme, concept, text). */
+export async function makeReelAction(postId: number, style?: ReelStyle | "all") {
   const { workspace } = await requireEditor();
   const post = await getPost(workspace.id, postId);
   if (!post) return;
+  const styles = style === "all" ? MULTI_STYLES : style && isReelStyle(style) ? [style] : [];
   await updatePost(workspace.id, postId, { reelStatus: "making", reelError: null });
-  await enqueue("post.reel", { workspaceId: workspace.id, postId }, workspace.id);
+  await enqueue("post.reel", { workspaceId: workspace.id, postId, styles }, workspace.id);
   kickJobs();
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
@@ -285,4 +290,13 @@ export async function finishMissingMediaAction(campaignId: number) {
   }
   kickJobs();
   revalidatePath(`/campaigns/${campaignId}`);
+}
+
+/** "Use this" on one of a post's video versions: it becomes the video that gets published. */
+export async function chooseVideoAction(postId: number, assetId: number) {
+  const { workspace, user } = await requireEditor();
+  const post = await getPost(workspace.id, postId);
+  if (!post) return;
+  await chooseVideo(workspace.id, postId, assetId, user.id);
+  revalidatePath(`/campaigns/${post.campaignId}`);
 }

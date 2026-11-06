@@ -3,14 +3,16 @@ import { brandFonts } from "@/lib/fonts";
 import path from "node:path";
 import { and, count, desc, eq, gte } from "drizzle-orm";
 import { getDb, schema } from "@/db";
-import type { Brand, Campaign, Post, ReelScript } from "@/db/schema";
+import type { Brand, Campaign, Post, ReelScript, ReelStyle } from "@/db/schema";
 import { freePlan } from "@/lib/config";
 import { assertCanGenerate } from "@/lib/plan";
 import { getFile, newKey, putFile } from "@/lib/storage";
 import { generateImage } from "../images/router";
 import { QuotaExceededError } from "../router";
 import { imagePrompt, siteLabel } from "../style";
-import { renderSceneFrame, REEL_H, REEL_W } from "./frames";
+import { renderSceneFrame, REEL_H, REEL_W, textBackground } from "./frames";
+import { autoStyle, motionFor, styleImageSuffix, transitionFor } from "./styles";
+import { presenterFace } from "./presenter";
 import { endCardFrame, productShotBackground } from "./cards";
 import { composePoster } from "../images/poster";
 import { creativeSpec } from "@/lib/formats";
@@ -26,7 +28,8 @@ import { mapLimit, parallelism } from "@/lib/concurrency";
  *   2. images   — one vertical AI image per scene (image router)
  *   3. voice    — each voiceover line becomes speech (voice router: Cloudflare / Piper / silent)
  *   4. frames   — image + on-screen text + subtitles + logo + progress bar (sharp)
- *   5. video    — each scene gets a slow zoom, its own voice, fade transitions (ffmpeg)
+ *   5. video    — each scene gets a camera move (zoom / pan / presenter "talk"), its own voice,
+ *                 text that slides in, and a style-specific transition to the next scene (ffmpeg xfade)
  *   6. music    — a soft music bed under the voice, fade in/out
  *   7. save     — MP4 (1080x1920, H.264 + AAC) stored as a "video" asset
  */
@@ -70,6 +73,31 @@ function musicInput(totalSec: number): { args: string[]; filter: string } {
   };
 }
 
+/** Seconds two neighbouring scenes overlap during a transition. */
+export const XFADE = 0.4;
+
+/** ffmpeg filter that joins N clips: xfade for the picture, acrossfade for the sound. Outputs [v] and [a]. */
+export function transitionFilter(durations: number[], style: ReelStyle): string {
+  if (durations.length === 1) return "[0:v]null[v];[0:a]anull[a]";
+  const parts: string[] = [];
+  let v = "[0:v]";
+  let a = "[0:a]";
+  let length = durations[0];
+  for (let k = 1; k < durations.length; k++) {
+    const last = k === durations.length - 1;
+    const outV = last ? "[v]" : `[v${k}]`;
+    const outA = last ? "[a]" : `[a${k}]`;
+    // The end card always fades in; scenes use the style's transitions.
+    const t = last ? "fade" : transitionFor(style, k - 1);
+    parts.push(`${v}[${k}:v]xfade=transition=${t}:duration=${XFADE}:offset=${(length - XFADE).toFixed(3)}${outV}`);
+    parts.push(`${a}[${k}:a]acrossfade=d=${XFADE}${outA}`);
+    length += durations[k] - XFADE;
+    v = outV;
+    a = outA;
+  }
+  return parts.join(";");
+}
+
 export async function buildReelVideo(input: {
   workspaceId: number;
   brand: Brand;
@@ -79,9 +107,14 @@ export async function buildReelVideo(input: {
   shots?: Buffer[];
   /** Used when every image AI is out of its free limit: the post's own poster photo and the app screenshots. */
   fallbacks?: { kind: "photo" | "shot"; data: Buffer; mime: string; provider: string }[];
+  /** Video style (default classic) and the brand presenter's face for presenter scenes. */
+  style?: ReelStyle;
+  presenter?: { face: Buffer; name: string } | null;
 }): Promise<{ mp4: Buffer; durationSec: number; voiceProvider: string; demoImages: boolean; cover: Buffer | null }> {
   const { workspaceId, brand, postId, script } = input;
   const shots = input.shots ?? [];
+  const style = input.style ?? script.style ?? "classic";
+  const presenter = input.presenter ?? null;
   let firstBackground: Buffer | null = null;
   const dir = await tempDir();
   const logo = brand.logoKey ? await getFile(brand.logoKey) : null;
@@ -94,20 +127,27 @@ export async function buildReelVideo(input: {
     const sceneResults = await mapLimit(script.scenes, parallelism().image, async (scene, i) => {
       const last = i === script.scenes.length - 1;
 
-      // 2. image: the product screenshot in a phone (free, real) or an AI photo.
+      // 2. image: brand-colour typography, the presenter's face, a product screenshot in a phone, or an AI photo.
+      const kind = scene.kind === "text" ? "text" : scene.kind === "presenter" && presenter ? "presenter" : "broll";
       const shot = scene.shot ? shots[scene.shot - 1] : undefined;
-      let img = shot
-        ? { data: await productShotBackground(shot, brand.colors), mime: "image/png", provider: "product_shot" }
-        : await generateImage(
-        { workspaceId, brandId: brand.id, purpose: "reel_scene", subject: { type: "post", id: postId } },
-        {
-          prompt: `${imagePrompt(brand, scene.imagePrompt || scene.onScreen, "band")}. Vertical 9:16 photo`,
-          width: REEL_W,
-          height: REEL_H,
-          colors: brand.colors,
-          seed: postId * 10 + i,
-        },
-      );
+      const suffix = styleImageSuffix(style, script.look);
+      let img =
+        kind === "text"
+          ? { data: await textBackground(brand.colors, i), mime: "image/png", provider: "typography" }
+          : kind === "presenter"
+            ? { data: presenter!.face, mime: "image/png", provider: "presenter" }
+            : shot
+              ? { data: await productShotBackground(shot, brand.colors), mime: "image/png", provider: "product_shot" }
+              : await generateImage(
+                  { workspaceId, brandId: brand.id, purpose: "reel_scene", subject: { type: "post", id: postId } },
+                  {
+                    prompt: `${imagePrompt(brand, scene.imagePrompt || scene.onScreen, "band")}${suffix ? `, ${suffix}` : ""}. Vertical 9:16 ${style === "concept" ? "illustration" : "photo"}`,
+                    width: REEL_W,
+                    height: REEL_H,
+                    colors: brand.colors,
+                    seed: postId * 10 + i,
+                  },
+                );
       // Every image AI out for today: prefer real material (the post's AI photo, the app screenshots) over brand art.
       if (img.provider === "brand_art" && input.fallbacks?.length) {
         const pick = input.fallbacks[i % input.fallbacks.length];
@@ -116,23 +156,26 @@ export async function buildReelVideo(input: {
           : { data: pick.data, mime: pick.mime, provider: pick.provider };
       }
       if (i === 0) firstBackground = img.data;
-      const sceneKey = newKey(workspaceId, "scene", img.mime);
-      await putFile(sceneKey, img.data, img.mime);
-      await db.insert(schema.assets).values({
-        workspaceId,
-        brandId: brand.id,
-        postId,
-        kind: "scene",
-        storageKey: sceneKey,
-        mime: img.mime,
-        width: REEL_W,
-        height: REEL_H,
-        bytes: img.data.length,
-        prompt: scene.imagePrompt,
-        provider: img.provider,
-        demo: isDemoProvider(img.provider),
-      });
-      if (isDemoProvider(img.provider)) demoImages = true;
+      // Typography and the presenter face are not new AI images: only scene photos are saved.
+      if (kind === "broll") {
+        const sceneKey = newKey(workspaceId, "scene", img.mime);
+        await putFile(sceneKey, img.data, img.mime);
+        await db.insert(schema.assets).values({
+          workspaceId,
+          brandId: brand.id,
+          postId,
+          kind: "scene",
+          storageKey: sceneKey,
+          mime: img.mime,
+          width: REEL_W,
+          height: REEL_H,
+          bytes: img.data.length,
+          prompt: scene.imagePrompt,
+          provider: img.provider,
+          demo: isDemoProvider(img.provider),
+        });
+        if (isDemoProvider(img.provider)) demoImages = true;
+      }
 
       // 3. voice
       const voice = await speak({ workspaceId, brandId: brand.id, postId }, scene.voiceover);
@@ -153,25 +196,27 @@ export async function buildReelVideo(input: {
         sceneIndex: i,
         sceneCount: script.scenes.length,
         fonts: brandFonts(brand.fonts),
+        layout: kind === "text" ? "text" : kind === "presenter" ? "presenter" : style === "concept" ? "concept" : "standard",
+        label: kind === "presenter" ? presenter!.name : style === "concept" ? (scene.step ?? null) : null,
       });
       const bgPath = path.join(dir, `b${i}.png`);
       const overlayPath = path.join(dir, `o${i}.png`);
       await fs.writeFile(bgPath, frame.background);
       await fs.writeFile(overlayPath, frame.overlay);
 
-      // 5. scene clip: slow zoom + fades + voice padded to the scene length
+      // 5. scene clip: camera move + text sliding in + voice padded to the scene length.
+      // Transitions between scenes are added when the clips are joined.
       const frames = Math.ceil(dur * FPS);
-      const zoomIn = i % 2 === 0;
-      const z = zoomIn ? `min(1+0.0009*on,1.12)` : `max(1.12-0.0009*on,1)`;
+      const m = motionFor(style, i, kind);
       const clip = path.join(dir, `c${i}.mp4`);
       await ffmpeg([
         "-loop", "1", "-framerate", String(FPS), "-i", bgPath,
         "-i", wavPath,
         "-loop", "1", "-framerate", String(FPS), "-i", overlayPath,
         "-filter_complex",
-        `[0:v]scale=1620:2880,zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${REEL_W}x${REEL_H}:fps=${FPS}[bg];` +
-          `[bg][2:v]overlay=0:0:shortest=1,` +
-          `fade=t=in:st=0:d=0.25,fade=t=out:st=${(dur - 0.25).toFixed(2)}:d=0.25,format=yuv420p[v];` +
+        `[0:v]scale=1620:2880,zoompan=z='${m.z}':x='${m.x}':y='${m.y}':d=1:s=${REEL_W}x${REEL_H}:fps=${FPS}[bg];` +
+          `[2:v]format=rgba,fade=t=in:st=0.1:d=0.4:alpha=1[ov];` +
+          `[bg][ov]overlay=x=0:y='if(lt(t,0.5),70*(1-t/0.5),0)':shortest=1,format=yuv420p[v];` +
           `[1:a]aresample=44100,apad=whole_dur=${dur.toFixed(2)},aformat=channel_layouts=stereo[a]`,
         "-map", "[v]", "-map", "[a]",
         "-frames:v", String(frames), "-t", dur.toFixed(2),
@@ -196,7 +241,7 @@ export async function buildReelVideo(input: {
     await ffmpeg([
       "-loop", "1", "-framerate", String(FPS), "-i", endPng,
       "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-      "-filter_complex", `[0:v]scale=${REEL_W}:${REEL_H},fade=t=in:st=0:d=0.3,format=yuv420p[v]`,
+      "-filter_complex", `[0:v]scale=${REEL_W}:${REEL_H},format=yuv420p[v]`,
       "-map", "[v]", "-map", "1:a",
       "-frames:v", String(Math.ceil(endDur * FPS)), "-t", String(endDur),
       "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-r", String(FPS),
@@ -205,13 +250,12 @@ export async function buildReelVideo(input: {
     ]);
     done.push({ clip: endClip, dur: endDur });
     const parts = done.map((d) => d.clip);
-    const total = done.reduce((a, d) => a + d.dur, 0);
+    const total = done.reduce((a, d) => a + d.dur, 0) - (done.length - 1) * XFADE;
 
-    // Join scenes.
-    const list = path.join(dir, "list.txt");
-    await fs.writeFile(list, parts.map((p) => `file '${p}'`).join("\n"));
+    // Join scenes with the style's transitions (video xfade + audio crossfade).
     const joined = path.join(dir, "joined.mp4");
-    await ffmpeg(["-f", "concat", "-safe", "0", "-i", list, "-c", "copy", joined]);
+    await ffmpeg(["-i", parts[0], ...parts.slice(1).flatMap((p) => ["-i", p]), "-filter_complex", transitionFilter(done.map((d) => d.dur), style), "-map", "[v]", "-map", "[a]",
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-r", String(FPS), "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "44100", joined]);
 
     // 6. music bed under the voice.
     const music = musicInput(total);
@@ -250,7 +294,7 @@ export async function buildReelVideo(input: {
 }
 
 /** Full Video Studio run for a post: script -> reel MP4 asset. */
-export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
+export async function makeReel(campaign: Campaign, brand: Brand, post: Post, requested?: ReelStyle) {
   await assertCanGenerate(post.workspaceId);
   const limit = freePlan().monthlyVideos;
   if ((await workspaceVideosThisMonth(post.workspaceId)) >= limit) {
@@ -261,7 +305,10 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
 
   const shotRows = await listProductShots(post.workspaceId, brand.id);
   const shotLabels = shotRows.map((s) => s.prompt || "app screen");
-  const { script, provider: scriptProvider } = await writeReelScriptWithProvider(campaign, brand, post, shotLabels);
+  const style: ReelStyle = requested ?? autoStyle(brand);
+  // Presenter videos need the brand's face (made once, then reused). No face = scene shots only.
+  const presenter = style === "presenter" ? await presenterFace(brand) : null;
+  const { script, provider: scriptProvider } = await writeReelScriptWithProvider(campaign, presenter ? { ...brand, presenter: brand.presenter ?? { faceKey: "", name: presenter.name, source: "ai" } } : brand, post, shotLabels, style);
   await db
     .update(schema.posts)
     .set({ reelScript: script })
@@ -279,7 +326,7 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
   const bgFile = bg && bg.provider !== "brand_art" ? await getFile(bg.storageKey) : null;
   if (bgFile && bg) fallbacks.push({ kind: "photo", data: bgFile, mime: bg.mime, provider: bg.provider ?? "image" });
   for (const f of shotFiles) fallbacks.push({ kind: "shot", data: f, mime: "image/png", provider: "product_shot" });
-  const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script, shots: shotFiles.length === shotRows.length ? shotFiles : [], fallbacks });
+  const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script, shots: shotFiles.length === shotRows.length ? shotFiles : [], fallbacks, style, presenter });
   let coverKey: string | undefined;
   if (video.cover) {
     coverKey = newKey(post.workspaceId, "cover", "image/png");
@@ -305,6 +352,7 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
       height: REEL_H,
       bytes: video.mp4.length,
       prompt: script.title,
+      style,
       provider: `ffmpeg + ${video.voiceProvider} voice`,
       demo: demoVideo,
     })
@@ -317,7 +365,7 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
     task: "video",
     purpose: "reel",
     provider: "ffmpeg",
-    model: `slideshow + ${video.voiceProvider}`,
+    model: `${style} + ${video.voiceProvider}`,
     prompt: script.title,
     output: `${video.durationSec.toFixed(1)}s, ${video.mp4.length} bytes`,
     status: "ok",
@@ -325,7 +373,7 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post) {
   });
   await db
     .update(schema.posts)
-    .set({ reelStatus: "done", reelError: null, reelScript: { ...script, voice: video.voiceProvider, durationSec: Math.round(video.durationSec), coverKey } })
+    .set({ reelStatus: "done", reelError: null, videoChoice: null, reelScript: { ...script, voice: video.voiceProvider, durationSec: Math.round(video.durationSec), coverKey } })
     .where(and(eq(schema.posts.workspaceId, post.workspaceId), eq(schema.posts.id, post.id)));
   await setDemoPart(post.workspaceId, post.id, "video", demoVideo);
   // New video = new version; an approved post goes back to review.

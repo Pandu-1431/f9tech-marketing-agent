@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import {
+  chooseVideoAction,
   editPostAction,
   editPosterTextAction,
   makeReelAction,
@@ -20,7 +21,8 @@ import { PLATFORM_LABELS } from "@/lib/platforms";
 import { StatusBadge } from "@/components/status-badge";
 import { requireAuth } from "@/lib/auth";
 import { canEditContent } from "@/lib/team";
-import { lastProviderFailure, campaignHistory, getBrand, getCampaign, isApprovedForPublish, latestPosters, latestVideos, listCampaignPosts } from "@/lib/data";
+import { lastProviderFailure, campaignHistory, getBrand, getCampaign, isApprovedForPublish, latestPosters, campaignVideos, listCampaignPosts } from "@/lib/data";
+import { REEL_STYLES, styleLabel } from "@/agent/video/styles";
 import { publicUrl } from "@/lib/storage";
 import { formatSlot, utcToZoned } from "@/lib/schedule";
 import { campaignJobProblem } from "@/jobs/queue";
@@ -70,13 +72,21 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const campaign = await getCampaign(workspace.id, Number(id));
   if (!campaign) notFound();
-  const [brand, posts, posters, videos, history] = await Promise.all([
+  const [brand, posts, posters, allVideos, history] = await Promise.all([
     getBrand(workspace.id, campaign.brandId),
     listCampaignPosts(workspace.id, campaign.id),
     latestPosters(workspace.id, campaign.id),
-    latestVideos(workspace.id, campaign.id),
+    campaignVideos(workspace.id, campaign.id),
     campaignHistory(workspace.id, campaign.id),
   ]);
+  // The video each post uses: the one a person picked ("Use this"), else the newest.
+  const videos = new Map(
+    posts.flatMap((p) => {
+      const list = allVideos.get(p.id) ?? [];
+      const pick = list.find((v) => v.id === p.videoChoice) ?? list[0];
+      return pick ? [[p.id, pick] as const] : [];
+    }),
+  );
   const [channels, publications] = await Promise.all([listChannels(workspace.id, campaign.brandId), campaignPublications(workspace.id, campaign.id)]);
   const channelPlatforms = new Set(channels.map((c) => c.platform));
   const makingVideos = posts.filter((p) => p.reelStatus === "making").length;
@@ -339,15 +349,51 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                     ) : (
                       post.reelStatus === "failed" && <p className="text-xs text-red-600">{post.reelError ?? "Video failed"}</p>
                     )}
+                    {(allVideos.get(post.id)?.length ?? 0) > 1 && (
+                      <div className="mt-2" data-testid="video-versions">
+                        <p className="mb-1 text-xs text-zinc-500">Versions ({allVideos.get(post.id)!.length}): pick the one to publish</p>
+                        <div className="flex gap-1.5 overflow-x-auto pb-1">
+                          {allVideos.get(post.id)!.map((v) => {
+                            const inUse = videos.get(post.id)?.id === v.id;
+                            return (
+                              <div key={v.id} className={`w-20 shrink-0 rounded-lg border p-1 text-center ${inUse ? "border-indigo-500 bg-indigo-50" : "border-zinc-200"}`}>
+                                <a href={publicUrl(v.storageKey)} target="_blank" rel="noreferrer">
+                                  <video src={publicUrl(v.storageKey)} preload="metadata" muted playsInline className="aspect-[9/16] w-full rounded bg-black object-cover" />
+                                </a>
+                                <p className="mt-0.5 truncate text-[10px] text-zinc-600">{styleLabel(v.style)}</p>
+                                {inUse ? (
+                                  <p className="text-[10px] font-semibold text-indigo-700">In use</p>
+                                ) : (
+                                  canEdit && post.status !== "published" && (
+                                    <form action={chooseVideoAction.bind(null, post.id, v.id)}>
+                                      <button className="text-[10px] font-semibold text-indigo-700 underline">Use this</button>
+                                    </form>
+                                  )
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {canEdit && post.reelStatus !== "making" && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        <form action={makeReelAction.bind(null, post.id)}>
-                          <button className="badge border border-zinc-200 bg-white text-zinc-600">
-                            {videos.get(post.id) ? "Remake video" : "Make reel video"}
-                          </button>
-                        </form>
+                      <div className="mt-2 space-y-1.5" data-testid="video-styles">
+                        <div className="flex flex-wrap gap-1.5">
+                          {REEL_STYLES.map((st) => (
+                            <form key={st.key} action={makeReelAction.bind(null, post.id, st.key)}>
+                              <button className="badge border border-zinc-200 bg-white text-zinc-600" title={st.hint}>
+                                {st.emoji} {st.label}
+                              </button>
+                            </form>
+                          ))}
+                          <form action={makeReelAction.bind(null, post.id, "all")}>
+                            <button className="badge border border-indigo-500 bg-indigo-50 text-indigo-700" title="One video in each style: presenter, theme, concept and text (uses 4 of your monthly videos)">
+                              ✨ Make all 4 styles
+                            </button>
+                          </form>
+                        </div>
                         {videos.get(post.id) && (
-                          <a href={publicUrl(videos.get(post.id)!.storageKey)} download={`reel-${post.id}.mp4`} className="badge border border-zinc-200 bg-white text-zinc-600">
+                          <a href={publicUrl(videos.get(post.id)!.storageKey)} download={`reel-${post.id}.mp4`} className="badge inline-block border border-zinc-200 bg-white text-zinc-600">
                             Download video
                           </a>
                         )}

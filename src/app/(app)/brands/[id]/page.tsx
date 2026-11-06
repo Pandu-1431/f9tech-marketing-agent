@@ -6,6 +6,7 @@ import { AutopilotForm } from "@/components/autopilot-form";
 import { ChannelsSection } from "@/components/channels-section";
 import { MemorySection } from "@/components/memory-section";
 import { SeoSection } from "@/components/seo-section";
+import { PresenterSection } from "@/components/presenter-section";
 import { seoJobState } from "@/agent/seo";
 import { listMemory } from "@/agent/memory";
 import { and, count, eq } from "drizzle-orm";
@@ -17,10 +18,10 @@ import { requireEditor } from "@/lib/auth";
 import { getBrand, listProductShots } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
-export default async function EditBrandPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ youtube?: string; gbp?: string; sheets?: string }> }) {
+export default async function EditBrandPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ youtube?: string; gbp?: string; sheets?: string; presenter?: string }> }) {
   const { workspace } = await requireEditor();
   const { id } = await params;
-  const { youtube, gbp, sheets } = await searchParams;
+  const { youtube, gbp, sheets, presenter } = await searchParams;
   const brand = await getBrand(workspace.id, Number(id));
   if (!brand) notFound();
   const shots = (await listProductShots(workspace.id, brand.id)).map((s) => ({ id: s.id, url: publicUrl(s.storageKey), label: s.prompt ?? "app screen" }));
@@ -40,6 +41,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
       </div>
       <AutopilotForm brand={brand} />
       <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} youtubeReady={googleConfigured()} youtubeStatus={youtube} gbpStatus={gbp} sheetsStatus={sheets} />
+      <PresenterSection brand={brand} status={presenter} />
       <SeoSection brand={brand} job={await seoJobState(workspace.id, brand.id)} />
       <MemorySection brand={brand} memory={await listMemory(workspace.id, brand.id)} measured={Number(measured?.n ?? 0)} />
       <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" timeZones={timeZoneOptions()} shots={shots} />

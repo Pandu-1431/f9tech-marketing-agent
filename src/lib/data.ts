@@ -227,6 +227,15 @@ export async function recordPostVersion(workspaceId: number, postId: number, rea
       .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId)))
       .returning();
     if (!post) return null;
+    let chosenVideo: number | null = null;
+    // The video a person picked with "Use this" (if it still exists), else the newest.
+    if (post.videoChoice) {
+      const [picked] = await tx
+        .select({ id: schema.assets.id })
+        .from(schema.assets)
+        .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.postId, postId), eq(schema.assets.id, post.videoChoice), eq(schema.assets.kind, "video")));
+      if (picked) chosenVideo = picked.id;
+    }
     const latest = async (kind: "poster" | "video") => {
       const [a] = await tx
         .select({ id: schema.assets.id })
@@ -251,7 +260,7 @@ export async function recordPostVersion(workspaceId: number, postId: number, rea
         posterSubline: post.posterSubline,
         posterKicker: post.posterKicker,
         posterAssetId: await latest("poster"),
-        videoAssetId: await latest("video"),
+        videoAssetId: chosenVideo ?? (await latest("video")),
         demoParts: post.demoParts,
         createdBy: userId,
       })
@@ -439,6 +448,34 @@ export async function setBrandLogo(workspaceId: number, brandId: number, logoKey
     .update(schema.brands)
     .set({ logoKey, updatedAt: new Date() })
     .where(and(eq(schema.brands.workspaceId, workspaceId), eq(schema.brands.id, brandId)));
+}
+
+/** Every video of each post in a campaign (newest first), for the "versions" strip. */
+export async function campaignVideos(workspaceId: number, campaignId: number) {
+  const db = await getDb();
+  const rows = await db
+    .select({ asset: schema.assets })
+    .from(schema.assets)
+    .innerJoin(schema.posts, eq(schema.posts.id, schema.assets.postId))
+    .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId), eq(schema.assets.kind, "video")))
+    .orderBy(desc(schema.assets.id));
+  const byPost = new Map<number, (typeof rows)[number]["asset"][]>();
+  for (const r of rows) if (r.asset.postId) byPost.set(r.asset.postId, [...(byPost.get(r.asset.postId) ?? []), r.asset]);
+  return byPost;
+}
+
+/** Pick which video version a post uses. A new pick is a new version (an approved post goes back to review). */
+export async function chooseVideo(workspaceId: number, postId: number, assetId: number, userId: number | null) {
+  const db = await getDb();
+  const [asset] = await db
+    .select({ id: schema.assets.id })
+    .from(schema.assets)
+    .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.postId, postId), eq(schema.assets.id, assetId), eq(schema.assets.kind, "video")));
+  if (!asset) return null;
+  const post = await getPost(workspaceId, postId);
+  if (!post || post.status === "published") return null;
+  await db.update(schema.posts).set({ videoChoice: asset.id }).where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.id, postId)));
+  return recordPostVersion(workspaceId, postId, "reel", userId);
 }
 
 /** Latest reel video for each post in a campaign. */

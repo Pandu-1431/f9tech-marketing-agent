@@ -108,6 +108,21 @@ export class FakeProvider implements TextProvider {
         ],
         cta: "Order on WhatsApp",
       });
+      // Video styles: shape the same four scenes like the style asks.
+      const style = /STYLE: (PRESENTER|THEME|CONCEPT|TEXT)/.exec(p)?.[1];
+      if (style) {
+        const out = JSON.parse(text) as { look?: string; scenes: Record<string, unknown>[] };
+        const steps = ["The problem", "The idea", "How it works", "Start today"];
+        out.scenes = out.scenes.map((sc, i) => ({
+          ...sc,
+          kind: style === "TEXT" ? "text" : style === "PRESENTER" && i % 2 === 0 ? "presenter" : "broll",
+          ...(style === "CONCEPT" ? { step: steps[i] } : {}),
+          ...(style === "TEXT" ? { image_prompt: "" } : {}),
+        }));
+        if (style === "PRESENTER") out.scenes.push({ kind: "presenter", voiceover: "See you at the shop. Bye!", on_screen: "See you soon", image_prompt: "" });
+        if (style === "THEME") out.look = "Diwali night, warm diyas, marigold garlands, gold and maroon";
+        text = JSON.stringify(out);
+      }
     } else if (p.includes("TASK: SEO_KIT")) {
       const searches = [...p.matchAll(/^- (.+)$/gm)].map((m) => m[1]).filter((s) => !s.startsWith("none available"));
       const city = (/City \/ market: ([^\n]+)/.exec(req.system)?.[1] ?? "").replace("not set", "").trim();

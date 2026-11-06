@@ -21,7 +21,39 @@ type FrameInput = {
   sceneCount: number;
   /** Brand heading and body fonts. */
   fonts?: { heading: string; body: string };
+  /** text = huge centred words; presenter = name tag; concept = step chip above the headline. */
+  layout?: "standard" | "text" | "presenter" | "concept";
+  /** Concept: the step label ("The idea"). Presenter: the presenter's name. */
+  label?: string | null;
 };
+
+const hex = (c: string) => /^#[0-9a-f]{6}$/i.test(c);
+
+function shade(color: string, amount: number): string {
+  const n = parseInt(color.slice(1), 16);
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v + 255 * amount)));
+  return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => ch(v).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Text videos: a brand-colour gradient with soft shapes (no AI image needed). Each scene shifts the colours. */
+export async function textBackground(colors: string[], sceneIndex: number): Promise<Buffer> {
+  const palette = colors.filter(hex);
+  const base = palette.length ? palette : ["#4F46E5", "#F59E0B"];
+  const a = base[sceneIndex % base.length];
+  const b = shade(base[(sceneIndex + 1) % base.length], -0.25);
+  const angle = [[0, 0, 1, 1], [1, 0, 0, 1], [0, 1, 1, 0]][sceneIndex % 3];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${REEL_W}" height="${REEL_H}">
+    <defs>
+      <linearGradient id="g" x1="${angle[0]}" y1="${angle[1]}" x2="${angle[2]}" y2="${angle[3]}"><stop offset="0" stop-color="${shade(a, -0.1)}"/><stop offset="1" stop-color="${b}"/></linearGradient>
+      <radialGradient id="r" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fff" stop-opacity="0.22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#g)"/>
+    <circle cx="${180 + (sceneIndex * 260) % 700}" cy="420" r="420" fill="url(#r)"/>
+    <circle cx="${900 - (sceneIndex * 190) % 600}" cy="1500" r="560" fill="url(#r)"/>
+    <rect x="-200" y="${700 + (sceneIndex % 3) * 120}" width="1600" height="90" fill="#fff" fill-opacity="0.05" transform="rotate(-12 540 960)"/>
+  </svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
 
 /**
  * One scene = a background (zoomed slowly by ffmpeg) + a transparent overlay that stays still:
@@ -48,11 +80,15 @@ export async function renderSceneFrame(f: FrameInput): Promise<{ background: Buf
   const HEAD = fontStack(headFamily, onScreen);
   const BODY = fontStack(bodyFamily, `${f.subtitle} ${f.cta ?? ""} ${f.brandName}`);
 
-  const headSize = 84;
-  const headLines = onScreen ? wrap(onScreen, Math.floor(boxW / (headSize * widthFactor(headFamily))), 3) : [];
-  const headTop = safe.top + 210; // below the logo row
+  const layout = f.layout ?? "standard";
+  const isText = layout === "text";
+  const headSize = isText ? 124 : 84;
+  const lineH = isText ? 140 : 100;
+  const headLines = onScreen ? wrap(onScreen, Math.floor(boxW / (headSize * widthFactor(headFamily))), isText ? 4 : 3) : [];
+  // Text videos: words in the middle of the screen. Others: below the logo row (concept leaves room for the step chip).
+  const headTop = isText ? Math.round(H / 2 - (headLines.length * lineH) / 2 - headSize) : safe.top + (layout === "concept" ? 290 : 210);
   const subSize = 44;
-  const subLines = f.cta ? [] : wrap(f.subtitle, Math.floor((boxW - 60) / (subSize * 0.55)), 4);
+  const subLines = f.cta ? [] : wrap(f.subtitle, Math.floor((boxW - 60) / (subSize * 0.55)), isText ? 3 : 4);
   const subBoxH = subLines.length * 60 + 52;
   const subBottom = H - safe.bottom - 40;
   const subTop = subBottom - subBoxH;
@@ -70,12 +106,32 @@ export async function renderSceneFrame(f: FrameInput): Promise<{ background: Buf
   const chipTop = safe.top + 20;
   const nameX = f.logo ? left + chip + 24 : left;
 
+  const label = f.label ? escapeXml(f.label.toUpperCase()) : "";
+  const chipW = Math.round(label.length * 24 + 80);
+  const stepChip =
+    layout === "concept" && label
+      ? `<rect x="${cx - chipW / 2}" y="${safe.top + 200}" width="${chipW}" height="72" rx="36" fill="${accent}"/>
+         <text x="${cx}" y="${safe.top + 248}" text-anchor="middle" font-family="${BODY}" font-weight="800" font-size="36" letter-spacing="2" fill="${readableOn(accent)}">${f.sceneIndex + 1} · ${label}</text>`
+      : "";
+  const tagW = Math.round((f.label?.length ?? 0) * 26 + f.brandName.length * 18 + 110);
+  const nameTag =
+    layout === "presenter" && label && !f.cta
+      ? `<g transform="translate(${left} ${subTop - 120})">
+           <rect width="${Math.min(boxW, tagW)}" height="84" rx="18" fill="#fff" fill-opacity="0.95"/>
+           <rect width="12" height="84" rx="6" fill="${accent}"/>
+           <text x="32" y="55" font-family="${BODY}" font-weight="800" font-size="40" fill="#111">${escapeXml(f.label ?? "")}<tspan font-weight="500" font-size="32" fill="#555"> · ${escapeXml(f.brandName.split(" · ")[0])}</tspan></text>
+         </g>`
+      : "";
+  const textUnderline = isText && headLines.length
+    ? `<rect x="${cx - 110}" y="${headTop + headSize + (headLines.length - 1) * lineH + 40}" width="220" height="14" rx="7" fill="${accent}"/>`
+    : "";
+
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
     <defs>
       <linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.7"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
       <linearGradient id="bot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.7"/></linearGradient>
     </defs>
-    <rect x="0" y="0" width="${W}" height="${headTop + headLines.length * 100 + 200}" fill="url(#top)"/>
+    ${isText ? "" : `<rect x="0" y="0" width="${W}" height="${headTop + headLines.length * 100 + 200}" fill="url(#top)"/>`}
     <rect x="0" y="${H - 900}" width="${W}" height="900" fill="url(#bot)"/>
     ${bars}
     <rect x="${nameX}" y="${chipTop + chip / 2 - 34}" width="8" height="68" rx="4" fill="${accent}"/>
@@ -83,9 +139,12 @@ export async function renderSceneFrame(f: FrameInput): Promise<{ background: Buf
     ${headLines
       .map(
         (l, i) =>
-          `<text x="${cx}" y="${headTop + headSize + i * 100}" text-anchor="middle" font-family="${HEAD}" font-weight="800" font-size="${headSize}" fill="#ffffff" stroke="#000" stroke-opacity="0.25" stroke-width="2">${escapeXml(l)}</text>`,
+          `<text x="${cx}" y="${headTop + headSize + i * lineH}" text-anchor="middle" font-family="${HEAD}" font-weight="800" font-size="${headSize}" fill="#ffffff" stroke="#000" stroke-opacity="0.25" stroke-width="2">${escapeXml(l)}</text>`,
       )
       .join("")}
+    ${textUnderline}
+    ${stepChip}
+    ${nameTag}
     ${
       subLines.length
         ? `<rect x="${left}" y="${subTop}" width="${boxW}" height="${subBoxH}" rx="28" fill="#000" fill-opacity="0.62"/>

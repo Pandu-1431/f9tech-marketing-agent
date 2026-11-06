@@ -10,6 +10,7 @@ import { designPost } from "@/agent/designer";
 import { qualityGate } from "@/agent/quality-gate";
 import { fixNotes } from "@/agent/quality";
 import { makeReel } from "@/agent/video/reel";
+import { isReelStyle } from "@/agent/video/styles";
 import type { PosterTemplate } from "@/agent/images/poster";
 import { TrialEndedError } from "@/lib/plan";
 import { friendlyError, getBrand, getCampaign, recordPostVersion, setCampaignStatus, setDemoPart, updatePost } from "@/lib/data";
@@ -226,8 +227,18 @@ const reelPostJob: Handler = async (payload) => {
   const brand = await getBrand(workspaceId, post.brandId);
   if (!campaign || !brand) throw permanent("Campaign or brand not found");
   try {
+    // payload.styles: one or more video styles ("Make all styles"). One video per job, so a retry
+    // never remakes the videos that already worked; the rest are queued as the next job.
+    const styles = (Array.isArray(payload.styles) ? payload.styles : [payload.style]).filter(isReelStyle);
+    const [style, ...rest] = styles;
     await updatePost(workspaceId, postId, { reelStatus: "making", reelError: null });
-    await makeReel(campaign, brand, post);
+    await makeReel(campaign, brand, post, style);
+    if (rest.length) {
+      await updatePost(workspaceId, postId, { reelStatus: "making" });
+      const { enqueue } = await import("./queue");
+      await enqueue("post.reel", { workspaceId, postId, styles: rest }, workspaceId);
+      return;
+    }
     await qualityGate(workspaceId, postId, { autoFix: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
