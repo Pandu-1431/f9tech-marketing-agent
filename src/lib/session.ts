@@ -20,7 +20,8 @@ export async function getSession() {
     cookieOptions: {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      // Secure cookies need https. A local production run (Docker on http://localhost) sets APP_URL=http://...
+      secure: process.env.NODE_ENV === "production" && !(process.env.APP_URL ?? "").startsWith("http://"),
       maxAge: 60 * 60 * 24 * 14,
     },
   });

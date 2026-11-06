@@ -82,6 +82,8 @@ tests/                 vitest: tenant isolation, limits, router, pipeline
 4. Free-tier safety: per-provider daily caps and per-workspace monthly caps.
 5. Human approval before anything is published.
 
+**Run everything on this computer with Docker:** see [DOCKER.md](DOCKER.md) (`npm run docker:up`, then http://localhost:3000).
+
 ## Phase 1 roadmap (3 weeks)
 
 - [x] Layer 1 — accounts, workspaces, business accounts (Brand Kit), free limits

@@ -1,0 +1,14 @@
+.git
+node_modules
+.next
+.data
+.data-*
+.env*
+!.env.example
+Claude outputs
+docs
+coverage
+playwright-report
+test-results
+tsconfig.tsbuildinfo
+*.log

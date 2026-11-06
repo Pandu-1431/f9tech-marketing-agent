@@ -16,7 +16,10 @@
     "eval": "tsx scripts/eval-agents.ts",
     "check:prod": "tsx scripts/check-env.ts",
     "copy:data": "tsx scripts/copy-data.ts",
-    "copy:uploads": "tsx scripts/copy-uploads.ts"
+    "copy:uploads": "tsx scripts/copy-uploads.ts",
+    "docker:up": "docker compose up -d --build && echo \"Open http://localhost:3000\"",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f --tail=100 web worker"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",
