@@ -12,7 +12,7 @@ import type { BrandMemory, MemoryTopic } from "@/db/schema";
  */
 
 export type MemoryKind = "learning" | "feedback" | "fact";
-export type MemorySource = "analyst" | "reviewer" | "editor" | "user";
+export type MemorySource = "analyst" | "reviewer" | "editor" | "director" | "user";
 
 export type MemoryInput = {
   kind: MemoryKind;

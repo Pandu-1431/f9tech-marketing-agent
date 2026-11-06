@@ -7,6 +7,8 @@ import { ChannelsSection } from "@/components/channels-section";
 import { MemorySection } from "@/components/memory-section";
 import { SeoSection } from "@/components/seo-section";
 import { PresenterSection } from "@/components/presenter-section";
+import { DirectorSection } from "@/components/director-section";
+import { directorJobState, planCampaigns } from "@/agent/director";
 import { seoJobState } from "@/agent/seo";
 import { listMemory } from "@/agent/memory";
 import { and, count, eq } from "drizzle-orm";
@@ -45,6 +47,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
           being built now.
         </p>
       )}
+      <DirectorSection brand={brand} job={await directorJobState(workspace.id, brand.id)} campaigns={await planCampaigns(workspace.id, brand.id, brand.marketingPlan)} />
       <AutopilotForm brand={brand} />
       <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} youtubeReady={googleConfigured()} youtubeStatus={youtube} gbpStatus={gbp} sheetsStatus={sheets} />
       <PresenterSection brand={brand} status={presenter} />

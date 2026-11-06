@@ -135,8 +135,17 @@ export async function runAutopilot(workspaceId: number, brandId: number, opts: {
     .orderBy(desc(schema.campaigns.id))
     .limit(6);
 
+  // Marketing Director: when the business has a goal, the week comes from the Director's plan.
+  const { directorWeek } = await import("./director");
+  const directed = await directorWeek(workspaceId, brandId, week, now).catch((err) => {
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw err;
+    return null;
+  });
+
   let pick: z.infer<typeof themeSchema>;
-  try {
+  if (directed) {
+    pick = { theme: directed.week.theme, goal: `Goal: ${directed.goal.objective}${directed.goal.target ? ` (${directed.goal.target})` : ""}.`, campaign_type: directed.week.campaignType, call_to_action: directed.week.callToAction, why: directed.week.why };
+  } else try {
     const out = await generateText(
       { workspaceId, brandId, purpose: "weekly_theme" },
       { system: await brandSystemPromptWithMemory(brand), prompt: strategistPrompt(brand, week, recent.map((r) => r.theme)), json: true, temperature: 0.7 },
@@ -151,7 +160,8 @@ export async function runAutopilot(workspaceId: number, brandId: number, opts: {
   }
 
   const platforms = (brand.autopilotPlatforms.length ? brand.autopilotPlatforms : brand.platforms).filter(Boolean);
-  const formats = allowedFormats({ formats: brand.autopilotFormats.filter((f) => (FORMATS as readonly string[]).includes(f)) });
+  const planFormats = directed?.week.formats.filter((f) => (FORMATS as readonly string[]).includes(f)) ?? [];
+  const formats = allowedFormats({ formats: planFormats.length ? planFormats : brand.autopilotFormats.filter((f) => (FORMATS as readonly string[]).includes(f)) });
   const campaign = await createCampaign(workspaceId, {
     brandId,
     theme: pick.theme.slice(0, 300),
@@ -159,7 +169,7 @@ export async function runAutopilot(workspaceId: number, brandId: number, opts: {
     platforms: platforms.length ? platforms : ["instagram"],
     startDate: week.start,
     endDate: week.end,
-    postsPerWeek: Math.max(1, Math.min(14, brand.autopilotPostsPerWeek)),
+    postsPerWeek: Math.max(1, Math.min(14, directed?.goal.postsPerWeek ?? brand.autopilotPostsPerWeek)),
     campaignType: (CAMPAIGN_TYPE_KEYS as readonly string[]).includes(pick.campaign_type) ? pick.campaign_type : "general",
     callToAction: pick.call_to_action.trim().slice(0, 60) || null,
     ctaUrl: brand.website,

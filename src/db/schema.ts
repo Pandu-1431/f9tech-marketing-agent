@@ -31,6 +31,19 @@ export type ReelScene = {
   /** Concept videos: the step label (e.g. "The problem"). */
   step?: string;
 };
+/** Marketing Director: what the business wants from marketing. */
+export type MarketingObjective = "awareness" | "followers" | "engagement" | "leads" | "traffic" | "installs" | "sales";
+export type MarketingGoal = { objective: MarketingObjective; target: string; focus: string; postsPerWeek: number };
+export type PlanWeek = { start: string; end: string; theme: string; campaignType: string; callToAction: string; formats: string[]; why: string };
+/** The Director's plan for the next four weeks, plus its weekly reviews. */
+export type MarketingPlan = {
+  summary: string;
+  pillars: { name: string; share: number; example: string }[];
+  weeks: PlanWeek[];
+  kpis: { metric: string; target: string }[];
+  reviews: { week: string; at: string; text: string; changes: string[] }[];
+  generatedAt: string;
+};
 /** Video styles: classic slideshow, AI presenter, theme-based, concept explainer, text-only. */
 export type ReelStyle = "classic" | "presenter" | "theme" | "concept" | "text";
 /** The brand's AI presenter (one face reused in every presenter video), or an uploaded real photo. */
@@ -154,6 +167,9 @@ export const brands = pgTable(
     // SEO kit: keywords people really search + hashtag sets, built from search suggestions (src/agent/seo.ts).
     seoKit: jsonb("seo_kit").$type<SeoKit | null>(),
     presenter: jsonb("presenter").$type<Presenter | null>(),
+    // Marketing Director: the goal and the current four-week plan (src/agent/director.ts).
+    marketingGoal: jsonb("marketing_goal").$type<MarketingGoal | null>(),
+    marketingPlan: jsonb("marketing_plan").$type<MarketingPlan | null>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

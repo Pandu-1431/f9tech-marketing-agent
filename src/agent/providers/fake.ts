@@ -132,6 +132,24 @@ export class FakeProvider implements TextProvider {
         tone: "Warm, clear, helpful", language: "English", services: lines.slice(1, 3), key_facts: lines.slice(0, 3),
         keywords: [`${title.toLowerCase()} near me`], hashtags: [`#${title.replace(/\s+/g, "")}`], dos: "Show real products", donts: "No fake claims",
       });
+    } else if (p.includes("TASK: MARKETING_PLAN")) {
+      const service = /SERVICES \/ FEATURES: ([^;\n]+)/.exec(p)?.[1] ?? "our main service";
+      text = JSON.stringify({
+        summary: "Build trust with useful posts, then turn attention into action with clear offers. Reels lead because short video reaches new people.",
+        pillars: [
+          { name: "Helpful tips", share: 40, example: "3 mistakes to avoid" },
+          { name: "Product / service", share: 35, example: `How ${service} works` },
+          { name: "Proof", share: 25, example: "A customer story" },
+        ],
+        weeks: [1, 2, 3, 4].map((n) => ({ theme: n === 1 ? `Spotlight: ${service}` : `Week ${n}: tips that help`, campaign_type: "general", call_to_action: "Message us today", formats: ["image", "reel"], why: "Mix reach and action" })),
+        kpis: [{ metric: "reach", target: "1,000 per week" }, { metric: "link clicks", target: "20 per week" }],
+      });
+    } else if (p.includes("TASK: WEEKLY_REVIEW")) {
+      const none = /0 published/.test(p);
+      text = JSON.stringify({
+        review: none ? "No posts were published last week, so there are no results to judge." : "Reels reached more people than posters.",
+        changes: none ? ["Approve posts early in the week so they go out on time"] : ["Make more reels", "Put the link in the first line"],
+      });
     } else if (p.includes("TASK: SEO_KIT")) {
       const searches = [...p.matchAll(/^- (.+)$/gm)].map((m) => m[1]).filter((s) => !s.startsWith("none available"));
       const city = (/City \/ market: ([^\n]+)/.exec(req.system)?.[1] ?? "").replace("not set", "").trim();

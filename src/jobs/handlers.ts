@@ -303,6 +303,17 @@ const autopilotJob: Handler = async (payload) => {
   }
 };
 
+/** Marketing Director: write the brand's four-week plan (on demand; the autopilot also refreshes it). */
+const directorPlanJob: Handler = async (payload) => {
+  const { makeMarketingPlan } = await import("@/agent/director");
+  try {
+    await makeMarketingPlan(Number(payload.workspaceId), Number(payload.brandId), { startNow: Boolean(payload.startNow) });
+  } catch (err) {
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
+    throw err;
+  }
+};
+
 /** Analyst: read post results, learn, remember (daily per brand). */
 const analystJob: Handler = async (payload) => {
   const { runAnalyst } = await import("@/agent/analyst");
@@ -362,6 +373,7 @@ designPostJob.onFinalFailure = async (payload, error) => {
 
 export const handlers = {
   "autopilot.run": autopilotJob,
+  "director.plan": directorPlanJob,
   "analyst.run": analystJob,
   "post.publish": publishJob,
   "campaign.plan": planCampaignJob,

@@ -63,6 +63,8 @@ describe("Brand Kit v2: Indian style and simple language", () => {
       analystLastRunAt: null,
       seoKit: null,
     presenter: null,
+    marketingGoal: null,
+    marketingPlan: null,
     });
     expect(system).toContain("BRAND KEY FACTS");
     expect(system).toContain("2,476 real UPSC past questions");
