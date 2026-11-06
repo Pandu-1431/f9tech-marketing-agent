@@ -21,6 +21,9 @@ export type Task = "text" | "image" | "voice";
 export const PROVIDER_HELP: Record<string, { label: string; free: string; url?: string; env: string[] }> = {
   "text:gemini": { label: "Google Gemini", free: "Free tier (daily request limit)", url: "https://aistudio.google.com/apikey", env: ["GEMINI_API_KEY"] },
   "text:groq": { label: "Groq (GPT-OSS 120B)", free: "Free tier", url: "https://console.groq.com/keys", env: ["GROQ_API_KEY"] },
+  "text:cerebras": { label: "Cerebras (GPT-OSS 120B, very fast)", free: "Free tier, large daily allowance", url: "https://cloud.cerebras.ai", env: ["CEREBRAS_API_KEY"] },
+  "text:mistral": { label: "Mistral (Small)", free: "Free Experiment plan", url: "https://console.mistral.ai/api-keys", env: ["MISTRAL_API_KEY"] },
+  "text:github": { label: "GitHub Models (GPT-4.1 mini)", free: "Free with a GitHub account", url: "https://github.com/settings/personal-access-tokens", env: ["GITHUB_MODELS_TOKEN"] },
   "text:openrouter": { label: "OpenRouter (free models)", free: "Free models", url: "https://openrouter.ai/keys", env: ["OPENROUTER_API_KEY"] },
   "text:local": { label: "Local model (Ollama)", free: "Free, runs on your Mac", url: "https://ollama.com", env: ["LOCAL_LLM_BASE_URL", "LOCAL_LLM_MODEL"] },
   "text:fake": { label: "Demo writer", free: "Built in, sample text only", env: [] },

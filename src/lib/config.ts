@@ -31,7 +31,7 @@ export function freePlan() {
 }
 
 export function textChain(): string[] {
-  return (process.env.AGENT_TEXT_CHAIN ?? "gemini,groq")
+  return (process.env.AGENT_TEXT_CHAIN ?? "gemini,groq,cerebras,mistral,openrouter,github")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -47,7 +47,8 @@ export function providerConfig(name: string): ProviderConfig | null {
         apiKey: e.GEMINI_API_KEY,
         model: e.GEMINI_MODEL ?? "gemini-flash-lite-latest,gemini-flash-latest",
         baseUrl: e.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta",
-        dailyLimit: num(e.GEMINI_DAILY_LIMIT, 200),
+        // Free tier: about 1,000 requests a day for Flash-Lite (fewer for Flash). Set yours if Google changes it.
+        dailyLimit: num(e.GEMINI_DAILY_LIMIT, 900),
         costPer1kInputUsd: 0,
         costPer1kOutputUsd: 0,
       };
@@ -59,7 +60,8 @@ export function providerConfig(name: string): ProviderConfig | null {
         // Your choice first, then current Groq models as backup (Groq retired Llama 3.3 in Aug 2026).
         model: [e.GROQ_MODEL, "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"].filter(Boolean).join(","),
         baseUrl: e.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
-        dailyLimit: num(e.GROQ_DAILY_LIMIT, 500),
+        // Free tier: about 1,000 requests a day per model.
+        dailyLimit: num(e.GROQ_DAILY_LIMIT, 1000),
         costPer1kInputUsd: 0,
         costPer1kOutputUsd: 0,
       };
@@ -71,6 +73,42 @@ export function providerConfig(name: string): ProviderConfig | null {
         model: [e.OPENROUTER_MODEL, "openai/gpt-oss-120b:free", "meta-llama/llama-3.3-70b-instruct:free"].filter(Boolean).join(","),
         baseUrl: e.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
         dailyLimit: num(e.OPENROUTER_DAILY_LIMIT, 50),
+        costPer1kInputUsd: 0,
+        costPer1kOutputUsd: 0,
+      };
+    case "cerebras":
+      // Free tier with a large daily token allowance: https://cloud.cerebras.ai
+      return {
+        name,
+        driver: "openai_compatible",
+        apiKey: e.CEREBRAS_API_KEY,
+        model: [e.CEREBRAS_MODEL, "gpt-oss-120b", "llama-3.3-70b", "qwen-3-32b"].filter(Boolean).join(","),
+        baseUrl: e.CEREBRAS_BASE_URL ?? "https://api.cerebras.ai/v1",
+        dailyLimit: num(e.CEREBRAS_DAILY_LIMIT, 1000),
+        costPer1kInputUsd: 0,
+        costPer1kOutputUsd: 0,
+      };
+    case "mistral":
+      // Free "Experiment" plan (phone check at sign-up): https://console.mistral.ai
+      return {
+        name,
+        driver: "openai_compatible",
+        apiKey: e.MISTRAL_API_KEY,
+        model: [e.MISTRAL_MODEL, "mistral-small-latest", "open-mistral-nemo"].filter(Boolean).join(","),
+        baseUrl: e.MISTRAL_BASE_URL ?? "https://api.mistral.ai/v1",
+        dailyLimit: num(e.MISTRAL_DAILY_LIMIT, 500),
+        costPer1kInputUsd: 0,
+        costPer1kOutputUsd: 0,
+      };
+    case "github":
+      // GitHub Models: free with a GitHub account (a token with the models:read permission).
+      return {
+        name,
+        driver: "openai_compatible",
+        apiKey: e.GITHUB_MODELS_TOKEN,
+        model: [e.GITHUB_MODELS_MODEL, "openai/gpt-4.1-mini", "meta/Llama-3.3-70B-Instruct"].filter(Boolean).join(","),
+        baseUrl: e.GITHUB_MODELS_BASE_URL ?? "https://models.github.ai/inference",
+        dailyLimit: num(e.GITHUB_MODELS_DAILY_LIMIT, 150),
         costPer1kInputUsd: 0,
         costPer1kOutputUsd: 0,
       };

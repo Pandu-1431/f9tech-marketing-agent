@@ -4,6 +4,9 @@ import type { Job } from "@/db/schema";
 import { handlers } from "./handlers";
 
 const MAX_ATTEMPTS = 3;
+/** A job waiting for free AI keeps its place; this only guards against a job that never fits. */
+const MAX_WAITS = 1000;
+export const WAITING_PREFIX = "Waiting for free AI until ";
 const g = globalThis as unknown as { __agentWorker?: boolean };
 
 export async function enqueue(type: keyof typeof handlers, payload: Record<string, unknown>, workspaceId?: number) {
@@ -72,6 +75,15 @@ async function runJob(job: Job): Promise<void> {
     await db.update(schema.jobs).set({ status: "done", error: null, updatedAt: new Date() }).where(eq(schema.jobs.id, job.id));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Every free AI is busy / used up: not a failure. Wait, then continue (this try does not count).
+    const waitUntil = (err as { waitUntil?: Date })?.waitUntil;
+    if (waitUntil instanceof Date && job.attempts <= MAX_WAITS) {
+      await db
+        .update(schema.jobs)
+        .set({ status: "queued", attempts: Math.max(0, job.attempts - 1), runAfter: waitUntil, error: `${WAITING_PREFIX}${waitUntil.toISOString()}`, updatedAt: new Date() })
+        .where(eq(schema.jobs.id, job.id));
+      return;
+    }
     const permanent = (err as { permanent?: boolean })?.permanent === true;
     const retry = !permanent && job.attempts < MAX_ATTEMPTS;
     await db

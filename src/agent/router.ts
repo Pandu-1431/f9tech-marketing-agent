@@ -30,6 +30,23 @@ export class AllProvidersFailedError extends Error {
   }
 }
 
+/**
+ * Every configured AI is busy or out of its free allowance right now. Not a failure: the job
+ * waits until `waitUntil` and continues where it stopped (the queue does not count it as a try).
+ */
+export class AllProvidersBusyError extends AllProvidersFailedError {
+  constructor(message: string, public readonly waitUntil: Date) {
+    super(message);
+    this.name = "AllProvidersBusyError";
+  }
+}
+
+/** The next time the free daily allowances reset (provider usage is counted per UTC day). */
+export function nextDailyReset(now = Date.now()): Date {
+  const d = new Date(now);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 5));
+}
+
 export type GenerateContext = {
   workspaceId: number;
   brandId?: number | null;
@@ -143,6 +160,10 @@ export async function generateText(ctx: GenerateContext, req: TextRequest): Prom
   const db = await getDb();
   const errors: string[] = [];
   const promptLog = `SYSTEM:\n${req.system}\n\nUSER:\n${req.prompt}`;
+  // Did every configured AI say "busy / out of free allowance"? Then wait instead of failing.
+  let configured = 0;
+  let busy = 0;
+  let wakeAt = Number.POSITIVE_INFINITY;
 
   for (const name of providerOrder(textChain())) {
     const built = buildProvider(name);
@@ -150,8 +171,11 @@ export async function generateText(ctx: GenerateContext, req: TextRequest): Prom
       errors.push(`${name}: not configured`);
       continue;
     }
+    configured++;
     if ((await providerRequestsToday(name)) >= built.dailyLimit) {
       errors.push(`${name}: daily free limit reached`);
+      busy++;
+      wakeAt = Math.min(wakeAt, nextDailyReset().getTime());
       continue;
     }
 
@@ -187,7 +211,11 @@ export async function generateText(ctx: GenerateContext, req: TextRequest): Prom
       const message = err instanceof Error ? err.message : String(err);
       errors.push(message);
       // Out for the day: rest an hour (and check again) instead of asking every 5 minutes.
-      if (isBusyError(message)) restProvider(name, Date.now(), isDailyError(message) ? 60 * 60_000 : cooldownMs());
+      if (isBusyError(message)) {
+        restProvider(name, Date.now(), isDailyError(message) ? 60 * 60_000 : cooldownMs());
+        busy++;
+        wakeAt = Math.min(wakeAt, textProviderRest(name) ?? Date.now() + 5 * 60_000);
+      }
       await db.insert(schema.generations).values({
         workspaceId: ctx.workspaceId,
         brandId: ctx.brandId ?? null,
@@ -206,5 +234,9 @@ export async function generateText(ctx: GenerateContext, req: TextRequest): Prom
     }
   }
 
+  if (configured > 0 && busy === configured) {
+    const at = new Date(Math.max(Date.now() + 60_000, Math.min(wakeAt, Date.now() + 6 * 3600_000)));
+    throw new AllProvidersBusyError(`All free AIs are busy or used up for now. ${errors.join(" | ")}`, at);
+  }
   throw new AllProvidersFailedError(`No text provider could answer. ${errors.join(" | ")}`);
 }

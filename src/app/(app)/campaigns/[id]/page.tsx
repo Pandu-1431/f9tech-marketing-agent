@@ -25,7 +25,7 @@ import { lastProviderFailure, campaignHistory, getBrand, getCampaign, isApproved
 import { REEL_STYLES, styleLabel } from "@/agent/video/styles";
 import { publicUrl } from "@/lib/storage";
 import { formatSlot, utcToZoned } from "@/lib/schedule";
-import { campaignJobProblem } from "@/jobs/queue";
+import { campaignJobProblem, WAITING_PREFIX } from "@/jobs/queue";
 import { openJobCount } from "@/jobs/heal";
 import type { Campaign, Post } from "@/db/schema";
 import { allowedFormats } from "@/agent/planner";
@@ -152,7 +152,14 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           )}
         </div>
       )}
-      {problem && !campaign.error && (
+      {problem && !campaign.error && problem.error.startsWith(WAITING_PREFIX) && (
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800" data-testid="waiting-for-ai">
+          ⏳ The free AIs are busy or used up for today. Nothing is lost: the team continues by itself at{" "}
+          <b>{formatSlot(new Date(problem.error.slice(WAITING_PREFIX.length)), brand?.timezone ?? "Asia/Kolkata")}</b>. Add another free AI key on the AI
+          connections page to continue sooner.
+        </p>
+      )}
+      {problem && !campaign.error && !problem.error.startsWith(WAITING_PREFIX) && (
         <p className={`rounded-lg px-3 py-2 text-sm ${problem.status === "failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
           {problem.status === "failed" ? "Stopped after 3 tries: " : `Hit a problem, retrying automatically (try ${problem.attempts} of 3): `}
           {problem.error.slice(0, 300)}

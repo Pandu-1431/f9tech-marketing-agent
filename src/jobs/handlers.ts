@@ -5,7 +5,7 @@ import { chunk, mapLimit, parallelism, pipelinePosters } from "@/lib/concurrency
 import { memoryLines } from "@/agent/memory";
 import { exemplarLines } from "@/agent/training/exemplars";
 import { planCampaign } from "@/agent/planner";
-import { QuotaExceededError } from "@/agent/router";
+import { AllProvidersBusyError, QuotaExceededError } from "@/agent/router";
 import { designPost } from "@/agent/designer";
 import { qualityGate } from "@/agent/quality-gate";
 import { fixNotes } from "@/agent/quality";
@@ -72,9 +72,10 @@ const writeCampaignJob: Handler = async (payload) => {
   const { enqueue } = await import("./queue");
   let failures = 0;
   let limitError: Error | null = null;
+  let busyError: AllProvidersBusyError | null = null;
   const batches = chunk(ideas, postsPerCall);
   await mapLimit(batches, parallel, async (batch) => {
-    if (limitError) return;
+    if (limitError || busyError) return;
     let written = new Map<number, Awaited<ReturnType<typeof writePostCopy>>>();
     try {
       written = await writePostsCopyBatch(campaign, brand, batch, { memory, examples });
@@ -98,6 +99,10 @@ const writeCampaignJob: Handler = async (payload) => {
           limitError = err;
           return;
         }
+        if (err instanceof AllProvidersBusyError) {
+          busyError = err; // stop for now; written posts are kept, the rest are written when the AI is back
+          return;
+        }
         failures++;
         await updatePost(workspaceId, post.id, { lastError: friendlyError(err instanceof Error ? err.message : String(err)) });
       }
@@ -107,6 +112,7 @@ const writeCampaignJob: Handler = async (payload) => {
     await setCampaignStatus(workspaceId, campaignId, "failed", { error: (limitError as Error).message });
     return; // stop quietly: the user has hit the free limit
   }
+  if (busyError) throw busyError; // the queue waits and runs this job again
 
   if (failures > 0) {
     // Leave failed ideas as "idea" and let the queue retry this job.
@@ -242,6 +248,7 @@ const reelPostJob: Handler = async (payload) => {
     await qualityGate(workspaceId, postId, { autoFix: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof AllProvidersBusyError) throw err; // stays "making": continues when the AI is back
     await updatePost(workspaceId, postId, { reelStatus: "failed", reelError: message.slice(0, 500) });
     if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(message);
     throw err;
