@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#120f2e]/85 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 print:hidden border-b border-white/10 bg-[#120f2e]/85 backdrop-blur-xl">
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-fuchsia-400/70 to-transparent" />
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-2.5">
           <Link href="/dashboard" aria-label="MarketingAgent home"><Wordmark /></Link>
@@ -70,7 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       {!trial.active && (
-        <div className="bg-red-50 px-6 py-2 text-center text-sm text-red-800">
+        <div className="bg-red-50 px-6 py-2 text-center text-sm text-red-800 print:hidden">
           Your free trial has ended. Your content is safe, but new AI generation is paused.
         </div>
       )}
