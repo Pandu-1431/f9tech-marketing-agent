@@ -298,6 +298,14 @@ export async function planCampaigns(workspaceId: number, brandId: number, plan: 
   const rows = await db
     .select({ id: schema.campaigns.id, status: schema.campaigns.status, start: schema.campaigns.startDate })
     .from(schema.campaigns)
-    .where(and(eq(schema.campaigns.workspaceId, workspaceId), eq(schema.campaigns.brandId, brandId), eq(schema.campaigns.source, "autopilot"), inArray(schema.campaigns.startDate, plan.weeks.map((w) => w.start))));
-  return new Map(rows.map((r) => [r.start, { id: r.id, status: r.status }]));
+    .where(and(eq(schema.campaigns.workspaceId, workspaceId), eq(schema.campaigns.brandId, brandId), eq(schema.campaigns.source, "autopilot")))
+    .orderBy(desc(schema.campaigns.id))
+    .limit(20);
+  // "Make this week's posts now" starts the week today, a few days before the plan week: match like planWeekFor.
+  const out = new Map<string, { id: number; status: string }>();
+  for (const w of plan.weeks) {
+    const hit = rows.find((r) => Math.abs(Date.parse(r.start) - Date.parse(w.start)) <= 3 * 86400000);
+    if (hit) out.set(w.start, { id: hit.id, status: hit.status });
+  }
+  return out;
 }

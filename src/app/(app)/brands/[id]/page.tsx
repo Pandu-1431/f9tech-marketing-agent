@@ -8,6 +8,8 @@ import { MemorySection } from "@/components/memory-section";
 import { SeoSection } from "@/components/seo-section";
 import { PresenterSection } from "@/components/presenter-section";
 import { DirectorSection } from "@/components/director-section";
+import { GoLiveChecklist } from "@/components/go-live";
+import { goLiveStatus } from "@/lib/go-live";
 import { EnquirySection } from "@/components/enquiry-section";
 import { last30Days, leadCodeFor } from "@/lib/leads";
 import { trackingBase } from "@/lib/links";
@@ -54,6 +56,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
           being built now.
         </p>
       )}
+      <GoLiveChecklist brand={brand} s={await goLiveStatus(workspace.id, brand)} />
       <DirectorSection brand={brand} job={await directorJobState(workspace.id, brand.id)} campaigns={await planCampaigns(workspace.id, brand.id, brand.marketingPlan)} />
       <AutopilotForm brand={brand} />
       <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} youtubeReady={googleConfigured()} youtubeStatus={youtube} gbpStatus={gbp} sheetsStatus={sheets} />

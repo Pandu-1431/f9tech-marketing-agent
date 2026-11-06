@@ -193,6 +193,9 @@ export function startInlineWorker(everyMs = 3000) {
         lastAutopilotCheck = Date.now();
         const { queueDueAutopilots } = await import("@/agent/autopilot");
         await queueDueAutopilots();
+        // Auto-approve first, so a post approved now goes out in the same minute.
+        const { autoApproveReady } = await import("@/agent/auto-approve");
+        await autoApproveReady();
         const { queueDuePublications } = await import("@/agent/publish");
         await queueDuePublications();
         const { healStuckWork } = await import("./heal");

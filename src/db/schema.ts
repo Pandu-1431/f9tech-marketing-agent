@@ -172,6 +172,8 @@ export const brands = pgTable(
     marketingPlan: jsonb("marketing_plan").$type<MarketingPlan | null>(),
     // Public enquiry page: /l/<leadCode>.
     leadCode: varchar("lead_code", { length: 16 }),
+    // Auto-approve: posts that pass the quality check publish without waiting for a person.
+    autoApprove: boolean("auto_approve").default(false).notNull(),
     // Community manager: when comments were last read.
     communityLastRunAt: timestamp("community_last_run_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

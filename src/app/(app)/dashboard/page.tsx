@@ -17,6 +17,8 @@ import { CountUp } from "@/components/ui/count-up";
 import { StatusBadge } from "@/components/status-badge";
 import { reviewCount } from "@/lib/review";
 import { growthSummary } from "@/lib/growth";
+import { goLiveStatus } from "@/lib/go-live";
+import { GoLiveChecklist } from "@/components/go-live";
 import { OBJECTIVES } from "@/agent/director";
 
 function Meter({ label, used, max, color }: { label: string; used: number; max: number; color: string }) {
@@ -60,6 +62,8 @@ export default async function DashboardPage() {
   const brands = await listBrands(workspace.id);
   const autopilotOn = brands.filter((b) => b.autopilotEnabled);
   const growth = await growthSummary(workspace.id, brands);
+  // Businesses that are not live yet get their checklist on the dashboard (first 3).
+  const goLive = (await Promise.all(brands.map(async (b) => ({ brand: b, s: await goLiveStatus(workspace.id, b) })))).filter((x) => x.s.done < 5).slice(0, 3);
   const workingNow = team.agents.filter((a) => a.working);
 
   return (
@@ -80,7 +84,7 @@ export default async function DashboardPage() {
             {workingNow.length ? `is working — ${workingNow.map((a) => a.name.toLowerCase()).join(", ")}` : "is ready for the next idea"}
           </h1>
           <p className="relative mt-3 max-w-lg text-sm text-white/65">
-            Six AI agents plan, write, design, make reels, check quality and publish. You only approve.
+            Eleven AI agents plan, write, design, make reels, check quality, publish and reply to comments. You approve, or let them.
           </p>
           <div className="relative mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
@@ -126,6 +130,10 @@ export default async function DashboardPage() {
           <Link href="/brands/new" className="btn mt-3">Add business account</Link>
         </div>
       )}
+
+      {goLive.map(({ brand: b, s }) => (
+        <GoLiveChecklist key={b.id} brand={b} s={s} compact canEdit={canEdit} />
+      ))}
 
       <section className="card space-y-4" data-testid="growth-card">
         <div className="flex flex-wrap items-end justify-between gap-2">
@@ -214,7 +222,7 @@ export default async function DashboardPage() {
           </div>
           {autopilotOn.length === 0 ? (
             <p className="mt-1 text-sm text-zinc-600">
-              Off. Turn it on in a business account (Brands → Edit → Weekly autopilot) and the AI team plans and makes every week for you.
+              Off. Set a goal for a business (Marketing Director) and the AI team plans and makes every week for you.
             </p>
           ) : (
             <ul className="mt-2 divide-y divide-zinc-100 text-sm">

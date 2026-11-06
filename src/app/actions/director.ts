@@ -73,3 +73,14 @@ export async function clearGoalAction(brandId: number) {
     .where(and(eq(schema.brands.workspaceId, workspace.id), eq(schema.brands.id, brandId)));
   revalidatePath(`/brands/${brandId}`);
 }
+
+/** Auto-approve on/off for one business. */
+export async function setAutoApproveAction(brandId: number, on: boolean) {
+  const { workspace } = await requireEditor();
+  const db = await getDb();
+  await db.update(schema.brands).set({ autoApprove: on, updatedAt: new Date() }).where(and(eq(schema.brands.workspaceId, workspace.id), eq(schema.brands.id, brandId)));
+  if (on) kickJobs();
+  revalidatePath(`/brands/${brandId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/review");
+}
