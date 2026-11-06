@@ -43,6 +43,9 @@ The app stores data in an embedded Postgres (PGlite) in `./.data` when `DATABASE
 
 ## Production (DigitalOcean droplet)
 
+Full step-by-step guide with scripts: [deploy/README.md](deploy/README.md) (`npm run check:prod`, `npm run copy:data`, `deploy/setup-droplet.sh`, `deploy/deploy.sh`, `/api/health`).
+
+
 1. Create a Postgres database and set `DATABASE_URL=postgres://...`.
 2. Set `SESSION_SECRET` (32+ random characters) and the AI keys.
 3. `npm ci && npm run build`.
