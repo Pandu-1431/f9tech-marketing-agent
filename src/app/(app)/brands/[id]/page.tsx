@@ -9,8 +9,8 @@ import { SeoSection } from "@/components/seo-section";
 import { PresenterSection } from "@/components/presenter-section";
 import { DirectorSection } from "@/components/director-section";
 import { EnquirySection } from "@/components/enquiry-section";
-import { leadCodeFor, leadsSince } from "@/lib/leads";
-import { clicksSince, trackingBase } from "@/lib/links";
+import { last30Days, leadCodeFor } from "@/lib/leads";
+import { trackingBase } from "@/lib/links";
 import { headers } from "next/headers";
 import { directorJobState, planCampaigns } from "@/agent/director";
 import { seoJobState } from "@/agent/seo";
@@ -31,6 +31,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
   const brand = await getBrand(workspace.id, Number(id));
   if (!brand) notFound();
   const shots = (await listProductShots(workspace.id, brand.id)).map((s) => ({ id: s.id, url: publicUrl(s.storageKey), label: s.prompt ?? "app screen" }));
+  const stats30 = await last30Days(workspace.id, brand.id);
   const db = await getDb();
   const [measured] = await db.select({ n: count() }).from(schema.postMetrics).where(and(eq(schema.postMetrics.workspaceId, workspace.id), eq(schema.postMetrics.brandId, brand.id)));
 
@@ -59,8 +60,8 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
       <EnquirySection
         brand={brand}
         url={`${(process.env.APP_URL ?? `http://${(await headers()).get("host") ?? "localhost:3000"}`).replace(/\/$/, "")}/l/${await leadCodeFor(workspace.id, brand.id)}`}
-        leads30={await leadsSince(workspace.id, brand.id, new Date(Date.now() - 30 * 86400000))}
-        clicks30={await clicksSince(workspace.id, brand.id, new Date(Date.now() - 30 * 86400000))}
+        leads30={stats30.leads}
+        clicks30={stats30.clicks}
         tracking={Boolean(trackingBase())}
       />
       <PresenterSection brand={brand} status={presenter} />

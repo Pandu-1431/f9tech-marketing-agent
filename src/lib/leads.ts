@@ -142,3 +142,10 @@ export async function leadsBetween(workspaceId: number, brandId: number, from: D
     .where(and(eq(schema.leads.workspaceId, workspaceId), eq(schema.leads.brandId, brandId), gte(schema.leads.createdAt, from), lt(schema.leads.createdAt, to)));
   return Number(r?.n ?? 0);
 }
+
+/** Leads and tracked link clicks in the last 30 days (for the business page). */
+export async function last30Days(workspaceId: number, brandId: number): Promise<{ leads: number; clicks: number }> {
+  const since = new Date(Date.now() - 30 * 86400000);
+  const { clicksSince } = await import("./links");
+  return { leads: await leadsSince(workspaceId, brandId, since), clicks: await clicksSince(workspaceId, brandId, since) };
+}
