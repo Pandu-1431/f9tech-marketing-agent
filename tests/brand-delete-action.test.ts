@@ -46,12 +46,13 @@ describe("delete business: confirmation rules", () => {
     expect(await deleteBrandForeverAction(brand.id, undefined, form(good))).toEqual({ error: "Only the workspace owner can delete a business account." });
 
     auth.current!.role = "owner";
-    expect((await deleteBrandForeverAction(brand.id, undefined, form({ ...good, confirmName: "sweet shop" })))?.error).toMatch(/name does not match/);
+    expect((await deleteBrandForeverAction(brand.id, undefined, form({ ...good, confirmName: "Sweet Store" })))?.error).toMatch(/name does not match/);
     expect((await deleteBrandForeverAction(brand.id, undefined, form({ confirmName: "Sweet Shop", password: "Right-Pass-1" })))?.error).toMatch(/Tick the box/);
     expect((await deleteBrandForeverAction(brand.id, undefined, form({ ...good, password: "wrong" })))?.error).toBe("Wrong password.");
     expect(await getBrand(ws.id, brand.id)).not.toBeNull(); // still there after every wrong try
 
-    await expect(deleteBrandForeverAction(brand.id, undefined, form(good))).rejects.toThrow("REDIRECT /brands?deleted=Sweet%20Shop");
+    // Capital letters, curly quotes and extra spaces don't matter, the words do.
+    await expect(deleteBrandForeverAction(brand.id, undefined, form({ ...good, confirmName: "  sweet   SHOP " }))).rejects.toThrow(/^REDIRECT \/brands\?deleted=Sweet\+Shop&posts=0&files=0&bytes=0$/);
     expect(await getBrand(ws.id, brand.id)).toBeNull();
   });
 
@@ -61,5 +62,15 @@ describe("delete business: confirmation rules", () => {
     const r = await deleteBrandForeverAction(brand.id, undefined, form({ confirmName: "Sweet Shop", password: "Right-Pass-1", understand: "on" }));
     expect(r?.error).toMatch(/Too many wrong tries/);
     expect(await getBrand(ws.id, brand.id)).not.toBeNull();
+  });
+});
+
+describe("name matching", async () => {
+  const { sameName } = await import("@/lib/names");
+  it("ignores case, quote style and spaces, not the words", () => {
+    expect(sameName("Haldiram’s", "haldiram's")).toBe(true);
+    expect(sameName("F9 Info  Technologies Pvt Ltd", "f9 info technologies pvt ltd")).toBe(true);
+    expect(sameName("F9 Info Technologies", "F9 Info Technologies Pvt Ltd")).toBe(false);
+    expect(sameName("", "")).toBe(false);
   });
 });

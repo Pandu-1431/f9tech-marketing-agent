@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Crumbs } from "@/components/ui/crumbs";
 import { notFound } from "next/navigation";
 import { requireEditor } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
@@ -22,7 +23,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
   return (
     <div className="max-w-3xl space-y-5" data-testid="article">
       <AutoRefresh active={a.status === "writing"} />
-      <Link href={`/brands/${brand.id}/articles`} className="text-sm text-zinc-500">← All articles</Link>
+      <Crumbs items={[{ href: "/brands", label: "Business accounts" }, { href: `/brands/${brand.id}`, label: brand.name }, { href: `/brands/${brand.id}/articles`, label: "Blog articles" }, { label: a.title ?? a.topic }]} />
       {a.status === "writing" && <div className="card text-sm text-indigo-700">Writing “{a.topic}”… this takes about a minute.</div>}
       {a.status === "failed" && (
         <div className="card space-y-2 text-sm text-red-700">

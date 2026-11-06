@@ -15,7 +15,7 @@ const KIND_LABEL: Record<string, { text: string; cls: string }> = {
 
 export function MemorySection({ brand, memory, measured }: { brand: Brand; memory: BrandMemory[]; measured: number }) {
   return (
-    <section id="memory" className="card space-y-4" data-testid="brand-memory">
+    <section id="memory" className="card scroll-mt-32 space-y-4" data-testid="brand-memory">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">Brand memory</h2>

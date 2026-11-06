@@ -6,6 +6,7 @@ import { getBrand } from "@/lib/data";
 import { brandFootprint, formatBytes } from "@/lib/brand-delete";
 import { deleteBrandForeverAction } from "@/app/actions/brands";
 import { DeleteBrandForm } from "@/components/delete-brand-form";
+import { Crumbs } from "@/components/ui/crumbs";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function DeleteBrandPage({ params }: { params: Promise<{ id
 
   return (
     <div className="max-w-xl space-y-6" data-testid="delete-brand">
-      <Link href={`/brands/${brand.id}`} className="text-sm text-zinc-500">← Back to {brand.name}</Link>
+      <Crumbs items={[{ href: "/brands", label: "Business accounts" }, { href: `/brands/${brand.id}`, label: brand.name }, { label: "Delete" }]} />
       <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-5">
         <h1 className="text-xl font-semibold text-red-800">Delete “{brand.name}” for good?</h1>
         <p className="mt-1 text-sm text-red-900">
@@ -46,6 +47,7 @@ export default async function DeleteBrandPage({ params }: { params: Promise<{ id
 
       <section className="card space-y-2">
         <h2 className="font-semibold">What will be deleted</h2>
+        <p className="text-xs text-zinc-500">After deleting you go back to Business accounts and see what was removed.</p>
         <table className="w-full text-sm">
           <tbody>
             {rows.map(([k, v]) => (
@@ -68,7 +70,7 @@ export default async function DeleteBrandPage({ params }: { params: Promise<{ id
       </section>
 
       <section className="card">
-        <DeleteBrandForm name={brand.name} action={deleteBrandForeverAction.bind(null, brand.id)} />
+        <DeleteBrandForm name={brand.name} backHref={`/brands/${brand.id}`} action={deleteBrandForeverAction.bind(null, brand.id)} />
       </section>
     </div>
   );

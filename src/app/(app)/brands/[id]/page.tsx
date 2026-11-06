@@ -10,6 +10,7 @@ import { SeoSection } from "@/components/seo-section";
 import { PresenterSection } from "@/components/presenter-section";
 import { DirectorSection } from "@/components/director-section";
 import { GoLiveChecklist } from "@/components/go-live";
+import { Crumbs } from "@/components/ui/crumbs";
 import { goLiveStatus } from "@/lib/go-live";
 import { EnquirySection } from "@/components/enquiry-section";
 import { last30Days, leadCodeFor } from "@/lib/leads";
@@ -40,15 +41,31 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
+      <Crumbs items={[{ href: "/brands", label: "Business accounts" }, { label: brand.name }]} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">{brand.name}</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href={`/brands/${brand.id}/articles`} className="btn-secondary">Blog articles</Link>
           <Link href={`/reports/${brand.id}`} className="btn-secondary">Monthly report</Link>
           <Link href={`/brands/${brand.id}/training`} className="btn-secondary">Training center</Link>
-
         </div>
       </div>
+      {/* Section menu: the page is long; jump straight to a part and always see the way around. */}
+      <nav className="sticky top-[64px] z-20 -mx-2 flex gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-white/90 px-2 py-1.5 text-sm shadow-sm backdrop-blur" aria-label="Sections" data-testid="section-nav">
+        {[
+          ["go-live", "Go live"],
+          ["director", "Director"],
+          ["channels", "Channels"],
+          ["enquiry", "Leads page"],
+          ["presenter", "Presenter"],
+          ["seo", "SEO"],
+          ["memory", "Memory"],
+          ["brand-kit", "Brand Kit"],
+          ...(canManageTeam(role) ? [["danger-zone", "Delete"]] : []),
+        ].map(([id, label]) => (
+          <a key={id} href={`#${id}`} className={`shrink-0 rounded-lg px-2.5 py-1 hover:bg-indigo-50 hover:text-indigo-700 ${id === "danger-zone" ? "text-red-600" : "text-zinc-600"}`}>{label}</a>
+        ))}
+      </nav>
       {onboarded && (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" data-testid="onboarded">
           Filled from {brand.website}. Check the Brand Kit below (especially the key facts), then connect channels and start a campaign. The SEO kit is
@@ -69,9 +86,10 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
       <PresenterSection brand={brand} status={presenter} />
       <SeoSection brand={brand} job={await seoJobState(workspace.id, brand.id)} />
       <MemorySection brand={brand} memory={await listMemory(workspace.id, brand.id)} measured={Number(measured?.n ?? 0)} />
+      <div id="brand-kit" className="scroll-mt-32" />
       <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" timeZones={timeZoneOptions()} shots={shots} />
       {canManageTeam(role) && (
-        <section className="rounded-2xl border border-red-200 p-5" data-testid="danger-zone">
+        <section id="danger-zone" className="scroll-mt-32 rounded-2xl border border-red-200 p-5" data-testid="danger-zone">
           <h2 className="font-semibold text-red-800">Danger zone</h2>
           <p className="mt-1 text-sm text-zinc-600">
             Delete this business account with all its posts, images, videos, leads and articles, and free the storage they use. You will see

@@ -46,7 +46,7 @@ export function ChannelsSection({
   const gbpChannel = channels.find((c) => c.platform === "google_business");
   const sheet = channels.find((c) => c.platform === "google_sheets");
   return (
-    <section id="channels" className="card space-y-4" data-testid="channels">
+    <section id="channels" className="card scroll-mt-32 space-y-4" data-testid="channels">
       <div>
         <h2 className="font-semibold">Publishing channels</h2>
         <p className="text-sm text-zinc-600">

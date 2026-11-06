@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Crumbs } from "@/components/ui/crumbs";
 import { notFound } from "next/navigation";
 import { requireEditor } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
@@ -21,7 +22,7 @@ export default async function ArticlesPage({ params }: { params: Promise<{ id: s
     <div className="max-w-3xl space-y-6" data-testid="articles">
       <AutoRefresh active={writing} />
       <div>
-        <Link href={`/brands/${brand.id}`} className="text-sm text-zinc-500">← {brand.name}</Link>
+        <Crumbs items={[{ href: "/brands", label: "Business accounts" }, { href: `/brands/${brand.id}`, label: brand.name }, { label: "Blog articles" }]} />
         <h1 className="text-2xl font-semibold">Blog &amp; SEO articles</h1>
         <p className="text-sm text-zinc-600">
           Articles for {brand.name}&apos;s website about what people really search on Google. Copy them into WordPress, Blogger or any site:

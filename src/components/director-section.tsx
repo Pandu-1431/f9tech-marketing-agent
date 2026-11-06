@@ -23,7 +23,7 @@ export function DirectorSection({
   const plan = brand.marketingPlan;
   const today = new Date().toISOString().slice(0, 10);
   return (
-    <section id="director" className="card space-y-4" data-testid="director">
+    <section id="director" className="card scroll-mt-32 space-y-4" data-testid="director">
       <AutoRefresh active={job.running} />
       <div>
         <h2 className="font-semibold">🧠 Marketing Director</h2>

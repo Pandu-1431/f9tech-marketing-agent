@@ -18,7 +18,7 @@ export function SeoSection({ brand, job }: { brand: Brand; job: { running: boole
   const kit = brand.seoKit;
   const sets = kit?.hashtagSets;
   return (
-    <section id="seo" className="card space-y-4" data-testid="seo-kit">
+    <section id="seo" className="card scroll-mt-32 space-y-4" data-testid="seo-kit">
       <AutoRefresh active={job.running} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

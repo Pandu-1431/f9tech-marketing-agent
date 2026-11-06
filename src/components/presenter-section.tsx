@@ -19,7 +19,7 @@ export function PresenterSection({ brand, status }: { brand: Brand; status?: str
   const p = brand.presenter;
   const msg = status ? MESSAGES[status] : undefined;
   return (
-    <section id="presenter" className="card space-y-3" data-testid="presenter">
+    <section id="presenter" className="card scroll-mt-32 space-y-3" data-testid="presenter">
       <div>
         <h2 className="font-semibold">Video presenter</h2>
         <p className="text-sm text-zinc-600">

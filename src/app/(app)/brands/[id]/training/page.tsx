@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Crumbs } from "@/components/ui/crumbs";
 import { notFound } from "next/navigation";
 import { requireEditor } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
@@ -37,7 +38,7 @@ export default async function TrainingPage({ params }: { params: Promise<{ id: s
     <div className="max-w-3xl space-y-6" data-testid="training-center">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href={`/brands/${brand.id}`} className="text-sm text-zinc-500 underline">← {brand.name}</Link>
+          <Crumbs items={[{ href: "/brands", label: "Business accounts" }, { href: `/brands/${brand.id}`, label: brand.name }, { label: "Training center" }]} />
           <h1 className="text-2xl font-semibold">Training center</h1>
           <p className="text-sm text-zinc-600">
             How the AI team learns {brand.name}&apos;s voice. Every approval, edit, rejection and post result teaches it. No setup needed.

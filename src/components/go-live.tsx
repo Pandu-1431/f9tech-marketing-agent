@@ -20,7 +20,7 @@ function Step({ n, done, title, children }: { n: number; done: boolean; title: s
 export function GoLiveChecklist({ brand, s, compact = false, canEdit = true }: { brand: Brand; s: GoLive; compact?: boolean; canEdit?: boolean }) {
   const live = s.done === 5;
   return (
-    <section className={`card space-y-3 ${live ? "border-emerald-200" : "border-indigo-200"}`} data-testid="go-live">
+    <section id={compact ? undefined : "go-live"} className={`card scroll-mt-32 space-y-3 ${live ? "border-emerald-200" : "border-indigo-200"}`} data-testid="go-live">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-semibold">{live ? "🎉 Live" : "Go live"}{compact ? `: ${brand.name}` : ""}</h2>
         <span className="badge bg-zinc-100 text-zinc-700">{s.done} of 5</span>

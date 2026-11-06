@@ -4,13 +4,15 @@ import { canEditContent } from "@/lib/team";
 import { freePlan } from "@/lib/config";
 import { listBrands } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
+import { formatBytes } from "@/lib/brand-delete";
 
-export default async function BrandsPage({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
+export default async function BrandsPage({ searchParams }: { searchParams: Promise<{ deleted?: string; posts?: string; files?: string; bytes?: string }> }) {
   const { workspace, role } = await requireAuth();
   const canEdit = canEditContent(role);
   const brands = await listBrands(workspace.id);
   const max = freePlan().maxBrands;
-  const deleted = (await searchParams).deleted?.slice(0, 160);
+  const sp = await searchParams;
+  const deleted = sp.deleted?.slice(0, 160);
 
   return (
     <div className="space-y-6">
@@ -30,7 +32,8 @@ export default async function BrandsPage({ searchParams }: { searchParams: Promi
 
       {deleted && (
         <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm text-zinc-700" data-testid="brand-deleted">
-          “{deleted}” was deleted with its posts and files.
+          ✓ <b>“{deleted}”</b> was deleted: {Number(sp.posts) || 0} posts and {Number(sp.files) || 0} files removed
+          {Number(sp.bytes) > 0 ? `, ${formatBytes(Number(sp.bytes))} of storage freed` : ""}. Your other business accounts are unchanged.
         </p>
       )}
 

@@ -4,7 +4,7 @@ import type { Brand } from "@/db/schema";
 /** The business's public enquiry page and what links and leads did in the last 30 days. */
 export function EnquirySection({ brand, url, leads30, clicks30, tracking }: { brand: Brand; url: string; leads30: number; clicks30: number; tracking: boolean }) {
   return (
-    <section id="enquiry" className="card space-y-3" data-testid="enquiry-section">
+    <section id="enquiry" className="card scroll-mt-32 space-y-3" data-testid="enquiry-section">
       <div>
         <h2 className="font-semibold">Enquiry page &amp; leads</h2>
         <p className="text-sm text-zinc-600">

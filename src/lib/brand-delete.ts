@@ -66,6 +66,7 @@ export async function deleteBrandForever(workspaceId: number, brandId: number): 
 }
 
 export function formatBytes(b: number): string {
+  if (b <= 0) return "0 KB";
   if (b < 1024 * 1024) return `${Math.max(1, Math.round(b / 1024))} KB`;
   if (b < 1024 ** 3) return `${(b / 1024 / 1024).toFixed(1)} MB`;
   return `${(b / 1024 ** 3).toFixed(2)} GB`;

@@ -9,7 +9,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAuth, requireEditor } from "@/lib/auth";
 import { canManageTeam } from "@/lib/team";
-import { deleteBrandForever } from "@/lib/brand-delete";
+import { brandFootprint, deleteBrandForever } from "@/lib/brand-delete";
+import { sameName } from "@/lib/names";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { createBrand, deleteProductShots, getBrand, LimitError, listProductShots, MAX_PRODUCT_SHOTS, setBrandLogo, updateBrand } from "@/lib/data";
@@ -199,14 +200,16 @@ export async function deleteBrandForeverAction(id: number, _prev: DeleteState, f
     deleteTries.set(user.id, [...tries, now]);
     return { error };
   };
-  if (String(formData.get("confirmName") ?? "").trim() !== brand.name.trim()) return fail("The name does not match. Type the business name exactly as shown.");
+  if (!sameName(String(formData.get("confirmName") ?? ""), brand.name)) return fail(`The name does not match. Type: ${brand.name}`);
   if (formData.get("understand") !== "on") return fail("Tick the box to confirm you understand this cannot be undone.");
   const db = await getDb();
   const [row] = await db.select({ hash: schema.users.passwordHash }).from(schema.users).where(eq(schema.users.id, user.id));
   if (!row || !(await bcrypt.compare(String(formData.get("password") ?? ""), row.hash))) return fail("Wrong password.");
   deleteTries.delete(user.id);
+  const before = await brandFootprint(workspace.id, id);
   await deleteBrandForever(workspace.id, id);
   revalidatePath("/brands");
   revalidatePath("/dashboard");
-  redirect(`/brands?deleted=${encodeURIComponent(brand.name)}`);
+  const q = new URLSearchParams({ deleted: brand.name, posts: String(before.posts), files: String(before.files), bytes: String(before.bytes) });
+  redirect(`/brands?${q}`);
 }

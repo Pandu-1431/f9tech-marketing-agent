@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Crumbs } from "@/components/ui/crumbs";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
@@ -39,6 +40,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 bg-white print:max-w-none" data-testid="report">
+      <Crumbs items={[{ href: "/brands", label: "Business accounts" }, { href: `/brands/${brand.id}`, label: brand.name }, { label: "Monthly report" }]} />
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         <Link href={`/reports/${brand.id}?month=${previousMonth(month)}`} className="btn-secondary">← {monthName(previousMonth(month))}</Link>
         {next && <Link href={`/reports/${brand.id}?month=${next}`} className="btn-secondary">{monthName(next)} →</Link>}
