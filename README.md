@@ -97,4 +97,14 @@ tests/                 vitest: tenant isolation, limits, router, pipeline
 - [x] Layer 5 — tracking: Tracker page (filters, CSV) + Google Sheet sync per business account (daily + "Sync now")
 - [x] Layer 6 — publishing to Facebook, Instagram, YouTube Shorts, Telegram, Google Business Profile; Analyst pulls results
 - [x] Layer 7 — client reviewer invites + Review page (every post ready to approve, across campaigns, with a count in the nav), production deploy kit (`deploy/README.md`)
+## Phase 2 (free agents)
+
+- [x] Setup from a website: paste a link, the AI fills the Brand Kit, colours and logo
+- [x] Marketing Director: goal -> four-week plan (pillars, weekly themes, KPIs) -> weekly runs -> weekly review that teaches the team
+- [x] Leads & CRM: public enquiry page per business, Leads page with WhatsApp follow-up; tracking links (UTM + click counting on a public address)
+- [x] Monthly report per business (printable PDF)
+- [x] Blog & SEO writer: website articles from what people search, with FAQ and structured data
+- [x] Community manager: Facebook / Instagram comments with AI-drafted replies (Inbox)
+- [x] Publishing to X (free tier) and LinkedIn (personal profile)
 - [ ] Go live on the droplet (needs droplet IP, domain, Supabase URL)
+- [ ] Paid add-ons later: WhatsApp Business API, ads agent, Razorpay billing, Indian-language voices, talking presenter (Veo)
