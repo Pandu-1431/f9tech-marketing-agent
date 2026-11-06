@@ -123,6 +123,15 @@ export class FakeProvider implements TextProvider {
         if (style === "THEME") out.look = "Diwali night, warm diyas, marigold garlands, gold and maroon";
         text = JSON.stringify(out);
       }
+    } else if (p.includes("TASK: BRAND_FROM_SITE")) {
+      const title = /SITE NAME: ([^\n]*)/.exec(p)?.[1]?.trim() || /TITLE: ([^\n|]*)/.exec(p)?.[1]?.trim() || "Business";
+      const page = p.split("PAGE TEXT:")[1] ?? "";
+      const lines = page.split("\n").map((l) => l.trim()).filter((l) => l.length > 20 && !l.startsWith("Fill ") && !l.startsWith("- ") && !l.startsWith("Reply "));
+      text = JSON.stringify({
+        name: title, industry: "Local business", city: "", description: lines[0] ?? "", audience: "People nearby who need this",
+        tone: "Warm, clear, helpful", language: "English", services: lines.slice(1, 3), key_facts: lines.slice(0, 3),
+        keywords: [`${title.toLowerCase()} near me`], hashtags: [`#${title.replace(/\s+/g, "")}`], dos: "Show real products", donts: "No fake claims",
+      });
     } else if (p.includes("TASK: SEO_KIT")) {
       const searches = [...p.matchAll(/^- (.+)$/gm)].map((m) => m[1]).filter((s) => !s.startsWith("none available"));
       const city = (/City \/ market: ([^\n]+)/.exec(req.system)?.[1] ?? "").replace("not set", "").trim();

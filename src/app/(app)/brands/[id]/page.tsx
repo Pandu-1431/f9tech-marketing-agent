@@ -18,10 +18,10 @@ import { requireEditor } from "@/lib/auth";
 import { getBrand, listProductShots } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
-export default async function EditBrandPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ youtube?: string; gbp?: string; sheets?: string; presenter?: string }> }) {
+export default async function EditBrandPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ youtube?: string; gbp?: string; sheets?: string; presenter?: string; onboarded?: string }> }) {
   const { workspace } = await requireEditor();
   const { id } = await params;
-  const { youtube, gbp, sheets, presenter } = await searchParams;
+  const { youtube, gbp, sheets, presenter, onboarded } = await searchParams;
   const brand = await getBrand(workspace.id, Number(id));
   if (!brand) notFound();
   const shots = (await listProductShots(workspace.id, brand.id)).map((s) => ({ id: s.id, url: publicUrl(s.storageKey), label: s.prompt ?? "app screen" }));
@@ -39,6 +39,12 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
           </form>
         </div>
       </div>
+      {onboarded && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" data-testid="onboarded">
+          Filled from {brand.website}. Check the Brand Kit below (especially the key facts), then connect channels and start a campaign. The SEO kit is
+          being built now.
+        </p>
+      )}
       <AutopilotForm brand={brand} />
       <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} youtubeReady={googleConfigured()} youtubeStatus={youtube} gbpStatus={gbp} sheetsStatus={sheets} />
       <PresenterSection brand={brand} status={presenter} />
