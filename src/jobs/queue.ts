@@ -200,6 +200,9 @@ export function startInlineWorker(everyMs = 3000) {
         // Analyst: once a day per brand, read post results and update the brand's memory.
         const { queueDueAnalysts } = await import("@/agent/analyst");
         await queueDueAnalysts();
+        // Community manager: every 30 minutes per brand, read new comments and draft replies.
+        const { queueDueCommunity } = await import("@/agent/community");
+        await queueDueCommunity();
       }
       fillJobLanes();
     } catch (err) {

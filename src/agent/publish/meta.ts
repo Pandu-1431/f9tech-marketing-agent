@@ -10,7 +10,7 @@ const GRAPH = () => (process.env.META_GRAPH_URL ?? "https://graph.facebook.com")
 const VERSION = () => process.env.META_GRAPH_VERSION ?? "v23.0";
 const url = (path: string) => `${GRAPH()}/${VERSION()}/${path.replace(/^\//, "")}`;
 
-async function graph(method: "GET" | "POST", path: string, token: string, body?: FormData | Record<string, string>) {
+export async function graph(method: "GET" | "POST", path: string, token: string, body?: FormData | Record<string, string>) {
   const target = new URL(url(path));
   let init: RequestInit = { method };
   if (method === "GET") {
@@ -38,7 +38,7 @@ async function graph(method: "GET" | "POST", path: string, token: string, body?:
  * Posting on a Page needs the PAGE's own token. People often paste a user or system-user token,
  * so ask Facebook for the Page token with it (works when that user can manage the Page).
  */
-async function pageToken(auth: ChannelAuth): Promise<string> {
+export async function pageToken(auth: ChannelAuth): Promise<string> {
   try {
     const page = await graph("GET", auth.config.pageId, auth.token, { fields: "access_token" });
     return typeof page.access_token === "string" && page.access_token ? page.access_token : auth.token;

@@ -162,6 +162,11 @@ export class FakeProvider implements TextProvider {
         body: [para, "", "## Why it matters", para, "", "## Step by step", "1. Start small", "2. Keep going every day", "3. **Check** your progress", "", "## Mistakes to avoid", "- Doing too much at once", "- Skipping the basics", "", "## Get started", cta ? `Ready? [Talk to us](${cta}).` : "Ready? Message us today."].join("\n"),
         faq: [{ q: `How long does ${topic.toLowerCase()} take?`, a: "Most people see progress in a few weeks." }],
       });
+    } else if (p.includes("TASK: COMMENT_REPLY")) {
+      const comment = /COMMENT BY [^:]*: ([^\n]*)/.exec(p)?.[1] ?? "";
+      const spam = /http|crypto|earn \$|follow me/i.test(comment);
+      const question = /\?/.test(comment);
+      text = JSON.stringify({ intent: spam ? "spam" : question ? "question" : "praise", reply: spam ? "" : question ? "Great question! Please message us and we will help you right away." : "Thank you so much! 🙏" });
     } else if (p.includes("TASK: SEO_KIT")) {
       const searches = [...p.matchAll(/^- (.+)$/gm)].map((m) => m[1]).filter((s) => !s.startsWith("none available"));
       const city = (/City \/ market: ([^\n]+)/.exec(req.system)?.[1] ?? "").replace("not set", "").trim();

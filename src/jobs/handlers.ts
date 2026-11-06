@@ -325,6 +325,12 @@ const articleJob: Handler = async (payload) => {
   }
 };
 
+/** Community manager: read new comments and draft replies (every 30 minutes per brand). */
+const communityJob: Handler = async (payload) => {
+  const { runCommunity } = await import("@/agent/community");
+  await runCommunity(Number(payload.workspaceId), Number(payload.brandId));
+};
+
 /** Analyst: read post results, learn, remember (daily per brand). */
 const analystJob: Handler = async (payload) => {
   const { runAnalyst } = await import("@/agent/analyst");
@@ -386,6 +392,7 @@ export const handlers = {
   "autopilot.run": autopilotJob,
   "director.plan": directorPlanJob,
   "article.write": articleJob,
+  "community.read": communityJob,
   "analyst.run": analystJob,
   "post.publish": publishJob,
   "campaign.plan": planCampaignJob,

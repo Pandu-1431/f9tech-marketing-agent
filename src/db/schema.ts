@@ -172,6 +172,8 @@ export const brands = pgTable(
     marketingPlan: jsonb("marketing_plan").$type<MarketingPlan | null>(),
     // Public enquiry page: /l/<leadCode>.
     leadCode: varchar("lead_code", { length: 16 }),
+    // Community manager: when comments were last read.
+    communityLastRunAt: timestamp("community_last_run_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -679,3 +681,35 @@ export const articles = pgTable(
 );
 
 export type Article = typeof articles.$inferSelect;
+
+// Community manager inbox: comments on published posts, with the AI's draft reply.
+export const comments = pgTable(
+  "comments",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => brands.id, { onDelete: "cascade" }),
+    publicationId: integer("publication_id").references(() => publications.id, { onDelete: "set null" }),
+    postId: integer("post_id"),
+    platform: varchar("platform", { length: 30 }).notNull(),
+    externalId: varchar("external_id", { length: 200 }).notNull(),
+    author: varchar("author", { length: 200 }),
+    text: text("text").notNull(),
+    commentedAt: timestamp("commented_at", { withTimezone: true }),
+    // question | praise | complaint | spam | other
+    intent: varchar("intent", { length: 12 }),
+    reply: text("reply"),
+    // new (no draft yet) | drafted | sent | skipped | failed
+    status: varchar("status", { length: 10 }).default("new").notNull(),
+    error: text("error"),
+    repliedAt: timestamp("replied_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("comments_platform_external").on(t.platform, t.externalId), index("comments_ws_status").on(t.workspaceId, t.status)],
+);
+
+export type Comment = typeof comments.$inferSelect;

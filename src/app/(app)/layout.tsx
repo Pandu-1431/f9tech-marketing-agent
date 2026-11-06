@@ -8,10 +8,11 @@ import { NavLinks } from "@/components/ui/nav-links";
 import { Wordmark } from "@/components/ui/logo";
 import { reviewCount } from "@/lib/review";
 import { newLeadCount } from "@/lib/leads";
+import { inboxCount } from "@/agent/community";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, workspace, role } = await requireAuth();
-  const [trial, myWorkspaces, waiting, newLeads] = await Promise.all([trialInfo(workspace.id), listMyWorkspaces(user.id), reviewCount(workspace.id), newLeadCount(workspace.id)]);
+  const [trial, myWorkspaces, waiting, newLeads, comments] = await Promise.all([trialInfo(workspace.id), listMyWorkspaces(user.id), reviewCount(workspace.id), newLeadCount(workspace.id), inboxCount(workspace.id)]);
 
   const review = { href: "/review", label: "Review", count: waiting };
   const links = [
@@ -23,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ...(role === "client" ? [] : [review]),
     { href: "/calendar", label: "Calendar" },
     { href: "/library", label: "Library" },
+    { href: "/inbox", label: "Inbox", count: comments },
     { href: "/leads", label: "Leads", count: newLeads },
     { href: "/tracker", label: "Tracker" },
     ...(canEditContent(role) ? [{ href: "/settings/ai", label: "AI connections" }] : []),

@@ -9,6 +9,7 @@ import { processJobs } from "../src/jobs/queue";
 import { queueDueAutopilots } from "../src/agent/autopilot";
 import { queueDuePublications } from "../src/agent/publish";
 import { queueDueAnalysts } from "../src/agent/analyst";
+import { queueDueCommunity } from "../src/agent/community";
 import { restoreProviderState } from "../src/agent/provider-state";
 
 const IDLE_MS = Number(process.env.WORKER_IDLE_MS ?? 3000);
@@ -30,6 +31,7 @@ async function main() {
       await queueDueAutopilots();
       await queueDuePublications();
       await queueDueAnalysts();
+      await queueDueCommunity();
       const ran = await processJobs(20);
       if (ran > 0) console.log(`[worker] ran ${ran} job(s)`);
       else await new Promise((r) => setTimeout(r, IDLE_MS));
