@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { DeleteButton } from "./delete-button";
 import type { FormState } from "@/app/actions/auth";
 import type { Brand } from "@/db/schema";
 import { PLATFORM_LABELS } from "@/lib/platforms";
@@ -12,11 +13,13 @@ type Props = {
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
   submitLabel: string;
   timeZones?: string[];
-  /** Product screenshots already saved (edit page only). */
-  shots?: { id: number; url: string; label: string }[];
+  /** Product screenshots already saved (edit page only), each with its delete action. */
+  shots?: { id: number; url: string; label: string; remove?: () => Promise<void> }[];
+  /** Delete the uploaded logo (edit page only). */
+  removeLogo?: () => Promise<void>;
 };
 
-export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["Asia/Kolkata"], shots = [] }: Props) {
+export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["Asia/Kolkata"], shots = [], removeLogo }: Props) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
   const join = (v?: string[] | null) => (v ?? []).join(", ");
   const hex = (v: string | undefined, fallback: string) => (v && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback);
@@ -56,7 +59,14 @@ export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["A
         <div className="flex items-center gap-4 md:col-span-2">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="Logo" className="h-16 w-16 rounded-lg border border-zinc-200 bg-white object-contain p-1" />
+            <span className="relative">
+              <img src={logoUrl} alt="Logo" className="h-16 w-16 rounded-lg border border-zinc-200 bg-white object-contain p-1" />
+              {removeLogo && (
+                <span className="absolute -right-2 -top-2 rounded-full bg-white shadow">
+                  <DeleteButton action={removeLogo} label="Remove logo" inForm />
+                </span>
+              )}
+            </span>
           ) : (
             <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-zinc-300 text-xs text-zinc-400">Logo</div>
           )}
@@ -188,9 +198,15 @@ export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["A
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={s.url} alt={s.label} className="mb-1 h-40 w-24 rounded-lg border border-zinc-200 object-cover object-top" />
                   <span className="block truncate">{i + 1}. {s.label}</span>
-                  <span className="flex items-center justify-center gap-1">
-                    <input type="checkbox" name="removeShot" value={s.id} /> remove
-                  </span>
+                  {s.remove ? (
+                    <span className="flex items-center justify-center">
+                      <DeleteButton action={s.remove} label="Delete screenshot" showLabel inForm />
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-1">
+                      <input type="checkbox" name="removeShot" value={s.id} /> remove
+                    </span>
+                  )}
                 </label>
               ))}
             </div>

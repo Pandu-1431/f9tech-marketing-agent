@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { deleteCampaignAction } from "@/app/actions/delete";
+import { DeleteButton } from "@/components/delete-button";
 import { requireAuth } from "@/lib/auth";
 import { canEditContent } from "@/lib/team";
 import { listCampaigns } from "@/lib/data";
@@ -29,6 +31,7 @@ export default async function CampaignsPage() {
                 <th>Dates</th>
                 <th>Platforms</th>
                 <th>Status</th>
+                <th className="w-10" />
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
@@ -43,6 +46,15 @@ export default async function CampaignsPage() {
                   <td className="text-zinc-600">{campaign.startDate} → {campaign.endDate}</td>
                   <td className="text-zinc-600">{campaign.platforms.join(", ")}</td>
                   <td><StatusBadge status={campaign.status} /></td>
+                  <td className="pr-3">
+                    {canEdit && (
+                      <DeleteButton
+                        action={deleteCampaignAction.bind(null, campaign.id, true)}
+                        label="Delete campaign"
+                        confirm={`Delete the campaign "${campaign.theme}" with all its posts, images and videos? Posts already published stay on the platforms.`}
+                      />
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

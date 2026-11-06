@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { canEditContent } from "@/lib/team";
+import { assetsInUse } from "@/lib/asset-delete";
+import { deleteAssetAction } from "@/app/actions/delete";
+import { DeleteButton } from "@/components/delete-button";
 import { requireAuth } from "@/lib/auth";
 import { listAssets } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
@@ -6,16 +10,18 @@ import { publicUrl } from "@/lib/storage";
 const KINDS: Record<string, string> = { poster: "Posters", video: "Videos", background: "AI images", scene: "Reel scenes", logo: "Logos" };
 
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
-  const { workspace } = await requireAuth();
+  const { workspace, role } = await requireAuth();
   const { kind = "poster" } = await searchParams;
   const active = KINDS[kind] ? kind : "poster";
   const assets = await listAssets(workspace.id, active);
+  const inUse = await assetsInUse(workspace.id, assets.map((a) => a.asset.id));
+  const canEdit = canEditContent(role);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Asset library</h1>
-        <p className="text-sm text-zinc-500">Everything the agent made or you uploaded, in one place.</p>
+        <p className="text-sm text-zinc-500">Everything the agent made or you uploaded, in one place. 🗑 deletes a file and frees its storage.</p>
       </div>
       <div className="flex gap-2">
         {Object.entries(KINDS).map(([k, label]) => (
@@ -29,7 +35,16 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {assets.map(({ asset, brandName }) => (
-            <div key={asset.id} className="card relative p-2">
+            <div key={asset.id} className="card relative p-2" data-testid="library-item">
+              {canEdit && (
+                <div className="absolute right-2 top-2 z-10 rounded-lg bg-white/90 shadow-sm">
+                  <DeleteButton
+                    action={deleteAssetAction.bind(null, asset.id, undefined)}
+                    label="Delete this file"
+                    confirm={inUse.has(asset.id) ? "A post that has not gone out yet uses this. Delete it anyway? The post will need a new one." : undefined}
+                  />
+                </div>
+              )}
               {asset.demo && (
                 <span data-testid="demo-stamp" className="absolute left-3 top-3 z-10 rounded-md border-2 border-black bg-amber-400 px-2 py-0.5 text-xs font-black uppercase tracking-widest text-black">
                   Demo

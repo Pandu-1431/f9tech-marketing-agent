@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { deleteLeadAction } from "@/app/actions/delete";
+import { DeleteButton } from "@/components/delete-button";
 import { requireAuth } from "@/lib/auth";
 import { canEditContent } from "@/lib/team";
 import { listBrands } from "@/lib/data";
@@ -88,6 +90,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                       <input name="notes" defaultValue={lead.notes ?? ""} placeholder="Notes" className="input w-56 py-1 text-xs" />
                       <button className="btn-secondary py-1 text-xs">Save</button>
                     </form>
+                  )}
+                  {canEdit && (
+                    <DeleteButton action={deleteLeadAction.bind(null, lead.id)} label="Delete lead" confirm={`Delete ${lead.name}'s enquiry (name, phone, message)? This cannot be undone.`} />
                   )}
                 </div>
               </article>

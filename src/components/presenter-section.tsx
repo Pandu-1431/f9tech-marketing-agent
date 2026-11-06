@@ -1,4 +1,6 @@
 import type { Brand } from "@/db/schema";
+import { removePresenterAction } from "@/app/actions/delete";
+import { DeleteButton } from "./delete-button";
 import { makePresenterAction, uploadPresenterAction } from "@/app/actions/presenter";
 import { publicUrl } from "@/lib/storage";
 
@@ -42,9 +44,12 @@ export function PresenterSection({ brand, status }: { brand: Brand; status?: str
               <b>{p.name}</b> <span className="text-zinc-500">({p.source === "upload" ? "your photo" : "AI face"})</span>
             </p>
           )}
-          <form action={makePresenterAction.bind(null, brand.id)}>
-            <button className="btn-secondary">{p ? "Try another AI face" : "Make an AI presenter"}</button>
-          </form>
+          <div className="flex flex-wrap items-center gap-2">
+            <form action={makePresenterAction.bind(null, brand.id)}>
+              <button className="btn-secondary">{p ? "Try another AI face" : "Make an AI presenter"}</button>
+            </form>
+            {p && <DeleteButton action={removePresenterAction.bind(null, brand.id)} label="Remove presenter" showLabel />}
+          </div>
           <form action={uploadPresenterAction.bind(null, brand.id)} className="flex flex-wrap items-center gap-2">
             <input className="input max-w-[140px]" name="name" placeholder="Name (e.g. Ravi)" defaultValue={p?.source === "upload" ? p.name : ""} />
             <input type="file" name="photo" accept="image/png,image/jpeg,image/webp" className="text-sm" />

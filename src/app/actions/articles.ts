@@ -8,6 +8,7 @@ import { getDb, schema } from "@/db";
 import { requireEditor } from "@/lib/auth";
 import { getBrand } from "@/lib/data";
 import { startArticle } from "@/agent/articles";
+import { deleteFiles } from "@/lib/storage";
 import { enqueue, processJobs } from "@/jobs/queue";
 
 /** Start writing an article on a topic (the job writes it in the background). */
@@ -26,7 +27,8 @@ export async function writeArticleAction(brandId: number, formData: FormData) {
 export async function deleteArticleAction(brandId: number, articleId: number) {
   const { workspace } = await requireEditor();
   const db = await getDb();
-  await db.delete(schema.articles).where(and(eq(schema.articles.workspaceId, workspace.id), eq(schema.articles.id, articleId)));
+  const [gone] = await db.delete(schema.articles).where(and(eq(schema.articles.workspaceId, workspace.id), eq(schema.articles.id, articleId))).returning({ cover: schema.articles.coverKey });
+  if (gone?.cover?.startsWith(`ws${workspace.id}/`)) await deleteFiles([gone.cover]).catch(() => 0);
   revalidatePath(`/brands/${brandId}/articles`);
   redirect(`/brands/${brandId}/articles`);
 }

@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { deleteCampaignAction } from "@/app/actions/delete";
+import { DeleteButton } from "@/components/delete-button";
 import {
   chooseVideoAction,
   editPostAction,
@@ -120,6 +122,14 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
             <form action={retryCampaignAction.bind(null, campaign.id)}>
               <button className="btn-secondary">Retry</button>
             </form>
+          )}
+          {canEdit && (
+            <DeleteButton
+              action={deleteCampaignAction.bind(null, campaign.id, false)}
+              label="Delete campaign"
+              showLabel
+              confirm={`Delete this campaign with its ${posts.length} posts, images and videos? Posts already published stay on the platforms.`}
+            />
           )}
         </div>
       </div>

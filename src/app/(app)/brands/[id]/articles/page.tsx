@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { deleteArticleQuickAction } from "@/app/actions/delete";
+import { DeleteButton } from "@/components/delete-button";
 import { Crumbs } from "@/components/ui/crumbs";
 import { notFound } from "next/navigation";
 import { requireEditor } from "@/lib/auth";
@@ -50,13 +52,16 @@ export default async function ArticlesPage({ params }: { params: Promise<{ id: s
 
       <div className="space-y-2">
         {articles.map((a) => (
-          <Link key={a.id} href={`/brands/${brand.id}/articles/${a.id}`} className="card flex items-center gap-3 hover:bg-zinc-50">
+          <div key={a.id} className="flex items-center gap-2">
+          <Link href={`/brands/${brand.id}/articles/${a.id}`} className="card flex flex-1 items-center gap-3 hover:bg-zinc-50">
             <div className="flex-1">
               <p className="font-medium">{a.title ?? a.topic}</p>
               <p className="text-xs text-zinc-500">{a.status === "ready" ? `${a.words} words · ${a.createdAt.toISOString().slice(0, 10)}` : a.status === "writing" ? "Writing…" : `Failed: ${a.error ?? ""}`}</p>
             </div>
             <span className={`badge ${a.status === "ready" ? "bg-emerald-50 text-emerald-700" : a.status === "writing" ? "bg-indigo-50 text-indigo-700" : "bg-red-50 text-red-700"}`}>{a.status}</span>
           </Link>
+          <DeleteButton action={deleteArticleQuickAction.bind(null, brand.id, a.id)} label="Delete article" />
+          </div>
         ))}
       </div>
     </div>

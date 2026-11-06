@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { deleteAssetAction, removeLogoAction } from "@/app/actions/delete";
 import { notFound } from "next/navigation";
 import { updateBrandAction } from "@/app/actions/brands";
 import { canManageTeam } from "@/lib/team";
@@ -35,7 +36,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
   const { youtube, gbp, sheets, presenter, onboarded, meta } = await searchParams;
   const brand = await getBrand(workspace.id, Number(id));
   if (!brand) notFound();
-  const shots = (await listProductShots(workspace.id, brand.id)).map((s) => ({ id: s.id, url: publicUrl(s.storageKey), label: s.prompt ?? "app screen" }));
+  const shots = (await listProductShots(workspace.id, brand.id)).map((s) => ({ id: s.id, url: publicUrl(s.storageKey), label: s.prompt ?? "app screen", remove: deleteAssetAction.bind(null, s.id, `/brands/${brand.id}`) }));
   const stats30 = await last30Days(workspace.id, brand.id);
   const db = await getDb();
   const [measured] = await db.select({ n: count() }).from(schema.postMetrics).where(and(eq(schema.postMetrics.workspaceId, workspace.id), eq(schema.postMetrics.brandId, brand.id)));
@@ -88,7 +89,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
       <SeoSection brand={brand} job={await seoJobState(workspace.id, brand.id)} />
       <MemorySection brand={brand} memory={await listMemory(workspace.id, brand.id)} measured={Number(measured?.n ?? 0)} />
       <div id="brand-kit" className="scroll-mt-32" />
-      <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" timeZones={timeZoneOptions()} shots={shots} />
+      <BrandForm brand={brand} logoUrl={brand.logoKey ? publicUrl(brand.logoKey) : null} action={updateBrandAction.bind(null, brand.id)} submitLabel="Save changes" timeZones={timeZoneOptions()} shots={shots} removeLogo={brand.logoKey ? removeLogoAction.bind(null, brand.id) : undefined} />
       {canManageTeam(role) && (
         <section id="danger-zone" className="scroll-mt-32 rounded-2xl border border-red-200 p-5" data-testid="danger-zone">
           <h2 className="font-semibold text-red-800">Danger zone</h2>
