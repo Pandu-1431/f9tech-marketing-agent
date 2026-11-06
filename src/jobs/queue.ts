@@ -4,11 +4,32 @@ import type { Job } from "@/db/schema";
 import { handlers } from "./handlers";
 
 const MAX_ATTEMPTS = 3;
+const g = globalThis as unknown as { __agentWorker?: boolean };
 
 export async function enqueue(type: keyof typeof handlers, payload: Record<string, unknown>, workspaceId?: number) {
   const db = await getDb();
   const [job] = await db.insert(schema.jobs).values({ type, payload, workspaceId }).returning();
+  kickWorker();
   return job;
+}
+
+/*
+ * Speed: a new job used to wait for the worker's next 3-second tick. Now the worker is
+ * kicked right away (once per event-loop turn), so chained steps start within milliseconds.
+ * Only when the inline worker is running; tests and scripts call processJobs() themselves.
+ */
+const kick = globalThis as unknown as { __agentKick?: boolean };
+export function kickWorker(): void {
+  if (!g.__agentWorker || kick.__agentKick) return;
+  kick.__agentKick = true;
+  setImmediate(() => {
+    kick.__agentKick = false;
+    try {
+      fillJobLanes();
+    } catch (err) {
+      console.error("[agent worker]", err);
+    }
+  });
 }
 
 /** Atomically claim the next due job (safe with several workers). */
@@ -148,7 +169,6 @@ export async function campaignJobProblem(workspaceId: number, campaignId: number
  * checks the queue every few seconds, so retries and leftover jobs always run,
  * even when nobody clicks anything.
  */
-const g = globalThis as unknown as { __agentWorker?: boolean };
 export function startInlineWorker(everyMs = 3000) {
   if (g.__agentWorker) return;
   g.__agentWorker = true;
@@ -160,7 +180,12 @@ export function startInlineWorker(everyMs = 3000) {
     if (busy) return;
     busy = true;
     try {
-      // On server start, anything marked "running" was interrupted: requeue it now.
+      // On server start, anything marked "running" was interrupted: requeue it now,
+      // and remember which free AIs were already out for the day (no wasted first call).
+      if (first) {
+        const { restoreProviderState } = await import("@/agent/provider-state");
+        await restoreProviderState().catch(() => 0);
+      }
       await recoverStaleJobs(10, first ? startedAt : undefined);
       first = false;
       // Weekly autopilot: once a minute, queue the brands whose planning day has come.
@@ -172,6 +197,9 @@ export function startInlineWorker(everyMs = 3000) {
         await queueDuePublications();
         const { healStuckWork } = await import("./heal");
         await healStuckWork();
+        // Analyst: once a day per brand, read post results and update the brand's memory.
+        const { queueDueAnalysts } = await import("@/agent/analyst");
+        await queueDueAnalysts();
       }
       fillJobLanes();
     } catch (err) {

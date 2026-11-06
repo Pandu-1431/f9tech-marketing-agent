@@ -1,7 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { writePostCopy, writePostsCopyBatch } from "@/agent/copywriter";
-import { chunk, mapLimit, parallelism } from "@/lib/concurrency";
+import { chunk, mapLimit, parallelism, pipelinePosters } from "@/lib/concurrency";
+import { memoryLines } from "@/agent/memory";
 import { planCampaign } from "@/agent/planner";
 import { QuotaExceededError } from "@/agent/router";
 import { designPost } from "@/agent/designer";
@@ -61,7 +62,10 @@ const writeCampaignJob: Handler = async (payload) => {
     .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId), eq(schema.posts.status, "idea")));
 
   // Write several posts per AI call, and run a few calls at the same time.
+  // The brand's memory (reviewer rules, what worked) is loaded once here, not once per post.
   const { text: parallel, postsPerCall } = parallelism();
+  const memory = await memoryLines(workspaceId, brand.id);
+  const { enqueue } = await import("./queue");
   let failures = 0;
   let limitError: Error | null = null;
   const batches = chunk(ideas, postsPerCall);
@@ -69,7 +73,7 @@ const writeCampaignJob: Handler = async (payload) => {
     if (limitError) return;
     let written = new Map<number, Awaited<ReturnType<typeof writePostCopy>>>();
     try {
-      written = await writePostsCopyBatch(campaign, brand, batch);
+      written = await writePostsCopyBatch(campaign, brand, batch, { memory });
     } catch (err) {
       if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
         limitError = err;
@@ -79,10 +83,12 @@ const writeCampaignJob: Handler = async (payload) => {
     }
     for (const post of batch) {
       try {
-        const { demo, ...copy } = written.get(post.id) ?? (await writePostCopy(campaign, brand, post));
-        await updatePost(workspaceId, post.id, { ...copy, status: "drafted" });
+        const { demo, ...copy } = written.get(post.id) ?? (await writePostCopy(campaign, brand, post, { memory }));
+        await updatePost(workspaceId, post.id, { ...copy, status: "drafted", designStatus: pipelinePosters() ? "designing" : post.designStatus });
         await setDemoPart(workspaceId, post.id, "text", demo);
         await recordPostVersion(workspaceId, post.id, "ai_write");
+        // Pipelined: this post's poster starts now, in another lane, while the next batch is still being written.
+        if (pipelinePosters()) await enqueue("post.design", { workspaceId, postId: post.id, thenReel: true }, workspaceId);
       } catch (err) {
         if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
           limitError = err;
@@ -103,7 +109,7 @@ const writeCampaignJob: Handler = async (payload) => {
     throw new Error(`${failures} post(s) could not be written yet`);
   }
   await setCampaignStatus(workspaceId, campaignId, "ready", { error: null });
-  const { enqueue } = await import("./queue");
+  // Posters not started by the pipeline above (older posts, text-only formats, retries) and the reels.
   await enqueue("campaign.design", { workspaceId, campaignId }, workspaceId);
 };
 writeCampaignJob.onFinalFailure = async (payload, error) => {
@@ -171,7 +177,8 @@ const designCampaignJob: Handler = async (payload) => {
     .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId)));
   let failures = 0;
   let stop = false;
-  const toDesign = todo.filter((p) => p.designStatus !== "done" && p.status !== "idea");
+  // "designing" posts already have their own post.design job (pipelined from the write step).
+  const toDesign = todo.filter((p) => p.designStatus !== "done" && p.designStatus !== "designing" && p.status !== "idea");
   await mapLimit(toDesign, parallelism().image, async (post) => {
     if (stop) return;
     try {
@@ -194,7 +201,7 @@ const designCampaignJob: Handler = async (payload) => {
     .select()
     .from(schema.posts)
     .where(and(eq(schema.posts.workspaceId, workspaceId), eq(schema.posts.campaignId, campaignId)));
-  for (const post of fresh.filter((p) => p.format === "reel" && p.reelStatus === "none" && p.status !== "idea")) {
+  for (const post of fresh.filter((p) => p.format === "reel" && p.reelStatus === "none" && p.status !== "idea" && p.designStatus !== "designing")) {
     await updatePost(workspaceId, post.id, { reelStatus: "making" });
     await enqueue("post.reel", { workspaceId, postId: post.id }, workspaceId);
   }
@@ -256,7 +263,13 @@ const designPostJob: Handler = async (payload) => {
       newBackground: Boolean(payload.newBackground),
       template: (payload.template as PosterTemplate | undefined) ?? undefined,
     });
-    await qualityGate(workspaceId, postId, { autoFix: false });
+    // Pipelined from the write step: the first check may rewrite and redesign, like the campaign job does.
+    await qualityGate(workspaceId, postId, { autoFix: Boolean(payload.thenReel) });
+    if (payload.thenReel && post.format === "reel" && post.reelStatus === "none") {
+      await updatePost(workspaceId, postId, { reelStatus: "making" });
+      const { enqueue } = await import("./queue");
+      await enqueue("post.reel", { workspaceId, postId }, workspaceId);
+    }
   } catch (err) {
     await updatePost(workspaceId, postId, { designStatus: "failed" });
     if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
@@ -275,6 +288,12 @@ const autopilotJob: Handler = async (payload) => {
   }
 };
 
+/** Analyst: read post results, learn, remember (daily per brand). */
+const analystJob: Handler = async (payload) => {
+  const { runAnalyst } = await import("@/agent/analyst");
+  await runAnalyst(Number(payload.workspaceId), Number(payload.brandId), { now: payload.at ? new Date(String(payload.at)) : undefined });
+};
+
 /** Publisher: send one approved post version to its channel. */
 const publishJob: Handler = async (payload) => {
   const { sendPublication } = await import("@/agent/publish");
@@ -287,6 +306,7 @@ designPostJob.onFinalFailure = async (payload, error) => {
 
 export const handlers = {
   "autopilot.run": autopilotJob,
+  "analyst.run": analystJob,
   "post.publish": publishJob,
   "campaign.plan": planCampaignJob,
   "campaign.write": writeCampaignJob,

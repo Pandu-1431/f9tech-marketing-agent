@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Brand, Campaign, Post, ReelScript } from "@/db/schema";
-import { brandSystemPrompt } from "../brand-context";
+import { brandSystemPromptWithMemory } from "../brand-context";
 import { parseJsonObject } from "../json";
 import { generateText } from "../router";
 import { campaignBriefLines } from "../planner";
@@ -61,7 +61,7 @@ export async function writeReelScript(campaign: Campaign, brand: Brand, post: Po
 export async function writeReelScriptWithProvider(campaign: Campaign, brand: Brand, post: Post, shots: string[] = []): Promise<{ script: ReelScript; provider: string }> {
   const out = await generateText(
     { workspaceId: post.workspaceId, brandId: brand.id, purpose: "reel_script", subject: { type: "post", id: post.id } },
-    { system: brandSystemPrompt(brand), prompt: reelPrompt(campaign, post, shots), json: true, temperature: 0.8 },
+    { system: await brandSystemPromptWithMemory(brand), prompt: reelPrompt(campaign, post, shots), json: true, temperature: 0.8 },
   );
   const s = schema.parse(parseJsonObject(out.text));
   const script: ReelScript = {

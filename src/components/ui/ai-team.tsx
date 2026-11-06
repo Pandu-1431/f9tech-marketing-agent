@@ -1,7 +1,7 @@
 import { ago, type ActivityItem, type AgentStatus } from "@/lib/team-status";
 import { AGENTS } from "@/lib/team-status";
 
-/** Six agent cards: live dot, what each one does, today's count. */
+/** One card per agent (seven, with the Analyst): live dot, what each one does, today's count. */
 export function AiTeam({ agents }: { agents: AgentStatus[] }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="ai-team">

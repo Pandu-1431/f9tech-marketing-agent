@@ -1,4 +1,5 @@
 import type { Brand } from "@/db/schema";
+import { memoryLines } from "./memory";
 import { brandFactsBlock, simpleLanguageRules } from "./style";
 
 const list = (items: string[] | null | undefined) => (items && items.length ? items.join(", ") : "not set");
@@ -16,7 +17,7 @@ export function brandServices(brand: Pick<Brand, "services">): string[] {
  * Turns a Brand Kit into the system prompt every generation starts with.
  * This is what keeps tone, audience and style consistent across all posts.
  */
-export function brandSystemPrompt(brand: Brand): string {
+export function brandSystemPrompt(brand: Brand, memory: string[] = []): string {
   return [
     "You are the senior social media and SEO strategist for the brand below.",
     "Always write in the brand's tone, for its audience, and follow its rules.",
@@ -43,5 +44,14 @@ export function brandSystemPrompt(brand: Brand): string {
     ...brandFactsBlock(brand),
     "",
     ...simpleLanguageRules(brand),
+    ...memory,
   ].join("\n");
+}
+
+/**
+ * The same prompt plus the brand's memory (learnings from results, reviewer rules).
+ * Load it once per job and pass `memory` on, instead of calling this for every post.
+ */
+export async function brandSystemPromptWithMemory(brand: Brand, memory?: string[]): Promise<string> {
+  return brandSystemPrompt(brand, memory ?? (await memoryLines(brand.workspaceId, brand.id)));
 }

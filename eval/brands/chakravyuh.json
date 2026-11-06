@@ -1,0 +1,36 @@
+{
+  "brand": {
+    "name": "Chakravyuh",
+    "industry": "UPSC exam preparation app",
+    "website": "https://chakravyuh.upsc.guru",
+    "city": "Visakhapatnam",
+    "description": "A free UPSC prep app that gives working aspirants a daily study plan sized to their free time, past questions and short notes.",
+    "audience": "UPSC CSE 2027 aspirants aged 21-32, many with a job, in Tier-2 and Tier-3 Indian cities",
+    "tone": "like a senior who cleared the exam: calm, clear, encouraging",
+    "language": "English",
+    "colors": ["#3730a3", "#f59e0b"],
+    "keywords": ["UPSC daily plan", "UPSC prelims 2027", "free UPSC app"],
+    "hashtags": ["#Chakravyuh", "#UPSC2027"],
+    "platforms": ["instagram", "facebook"],
+    "services": "Daily study plan sized to your free time\nPrevious year questions (PYQ) with short answers\nShort notes for revision\nWeekly mock test",
+    "dos": "Speak to working aspirants; give one useful tip per post",
+    "donts": "No rank promises, no coaching-style hype, no prices",
+    "keyFacts": "Free, no ads. UPSC Prelims 2027: 23 May 2027. Android app on Google Play.",
+    "visualStyle": "Young Indian aspirants studying at home, in hostels and libraries; natural light; calm",
+    "timezone": "Asia/Kolkata"
+  },
+  "campaign": {
+    "theme": "Prelims 2027 countdown: start your daily plan",
+    "goal": "More app installs from working aspirants",
+    "platforms": ["instagram", "facebook"],
+    "campaignType": "general",
+    "callToAction": "Open the free app",
+    "ctaUrl": "https://chakravyuh.upsc.guru",
+    "formats": ["image", "carousel", "text"]
+  },
+  "learnings": [
+    { "topic": "format", "text": "On instagram, carousels get 2.1x the engagement of image posts (9 posts). Plan more of them.", "data": { "platform": "instagram", "format": "carousel", "lift": 2.1 }, "weight": 9 },
+    { "topic": "time", "text": "On instagram, posts in the evening get 1.8x the engagement (7 posts). Post around 19:00.", "data": { "platform": "instagram", "bucket": "evening", "time": "19:00", "lift": 1.8 }, "weight": 7 },
+    { "topic": "hook", "text": "Captions that open with a question get 1.6x the engagement (6 posts). Open most captions that way.", "data": { "hook": "question", "lift": 1.6 }, "weight": 6 }
+  ]
+}

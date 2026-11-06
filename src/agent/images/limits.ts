@@ -7,6 +7,8 @@
  * State lives on globalThis so the web server and the inline worker share it.
  */
 
+import { persistRest } from "../provider-state";
+
 type LimitState = {
   restUntil: Map<string, number>;
   restReason: Map<string, string>;
@@ -27,10 +29,12 @@ export function nextUtcMidnight(now = Date.now()): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
 }
 
-export function restImageProvider(name: string, untilMs: number, reason: string) {
+export function restImageProvider(name: string, untilMs: number, reason: string, opts: { persist?: boolean } = {}) {
   if (cooldownOff()) return;
   state().restUntil.set(name, untilMs);
   state().restReason.set(name, reason);
+  // Remembered across restarts (src/agent/provider-state.ts).
+  if (opts.persist !== false) persistRest(name, "image", untilMs, reason);
 }
 
 /** When the provider can be used again (ms), or null when it is ready now. */

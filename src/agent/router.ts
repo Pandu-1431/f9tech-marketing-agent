@@ -2,6 +2,7 @@ import { and, eq, gte, sql, count } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { freePlan, providerConfig, textChain } from "@/lib/config";
 import { assertCanGenerate } from "@/lib/plan";
+import { persistRest } from "./provider-state";
 import { FakeProvider } from "./providers/fake";
 import { GeminiProvider } from "./providers/gemini";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
@@ -116,8 +117,11 @@ export function providerOrder(chain: string[], now = Date.now()): string[] {
   const ready = chain.filter((n) => (restingUntil.get(n) ?? 0) <= now);
   return [...ready, ...chain.filter((n) => !ready.includes(n))];
 }
-export function restProvider(name: string, now = Date.now(), ms = cooldownMs()) {
-  restingUntil.set(name, now + Math.min(ms, cooldownMs() ? ms : 0));
+export function restProvider(name: string, now = Date.now(), ms = cooldownMs(), opts: { persist?: boolean } = {}) {
+  const until = now + Math.min(ms, cooldownMs() ? ms : 0);
+  restingUntil.set(name, until);
+  // Remembered across restarts (src/agent/provider-state.ts).
+  if (opts.persist !== false && until > now) persistRest(name, "text", until, "busy or over the free limit");
 }
 /** When a text provider can be used again, or null if it is ready (for the free-AI fuel gauge). */
 export function textProviderRest(name: string, now = Date.now()): number | null {

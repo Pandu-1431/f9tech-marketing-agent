@@ -4,6 +4,7 @@ import type { Brand, Campaign } from "@/db/schema";
 import { campaignArc, campaignTypeLabel } from "@/lib/campaign-types";
 import { freePlan } from "@/lib/config";
 import { brandServices, brandSystemPrompt } from "./brand-context";
+import { bestFormats, bestTimes, listMemory, memoryBlock } from "./memory";
 import { DEFAULT_TIMEZONE, isHhMm, isValidTimeZone, slotFor, zonedToUtc } from "@/lib/schedule";
 import { parseJsonObject } from "./json";
 import { generateText } from "./router";
@@ -53,7 +54,17 @@ export function campaignBriefLines(c: Campaign): string[] {
   ].filter((line): line is string => Boolean(line));
 }
 
-export function plannerPrompt(c: Campaign, postCount: number, brand?: Pick<Brand, "services">): string {
+/** What the Analyst learned that the planner should act on (best times and formats per platform). */
+export function plannerMemoryLines(hints: { times?: Record<string, string>; formats?: Record<string, string> }): string[] {
+  const t = Object.entries(hints.times ?? {});
+  const f = Object.entries(hints.formats ?? {});
+  return [
+    t.length > 0 && `BEST POSTING TIMES (from this brand's results; use them): ${t.map(([p, v]) => `${p} ${v}`).join(", ")}`,
+    f.length > 0 && `BEST FORMATS (from this brand's results; use them more, not only): ${f.map(([p, v]) => `${p} = ${v}`).join(", ")}`,
+  ].filter((line): line is string => Boolean(line));
+}
+
+export function plannerPrompt(c: Campaign, postCount: number, brand?: Pick<Brand, "services">, hints: { times?: Record<string, string>; formats?: Record<string, string> } = {}): string {
   const formats = allowedFormats(c);
   const services = brand ? brandServices(brand) : [];
   return [
@@ -67,6 +78,7 @@ export function plannerPrompt(c: Campaign, postCount: number, brand?: Pick<Brand
     `END_DATE: ${c.endDate}`,
     `POST_COUNT: ${postCount}`,
     services.length > 0 && `SERVICES: ${services.join("; ")}`,
+    ...plannerMemoryLines(hints),
     "",
     "Plan a content calendar for this campaign.",
     `- Exactly ${postCount} posts, spread across the dates (inclusive), spread across the platforms.`,
@@ -85,9 +97,13 @@ export function plannerPrompt(c: Campaign, postCount: number, brand?: Pick<Brand
 /** Theme -> calendar of post ideas, saved as posts with status "idea". */
 export async function planCampaign(campaign: Campaign, brand: Brand) {
   const postCount = targetPostCount(campaign);
+  // Brand memory: reviewer rules + what the results showed (best times/formats steer the calendar).
+  const memory = await listMemory(campaign.workspaceId, brand.id).catch(() => []);
+  const times = bestTimes(memory);
+  const hints = { times, formats: bestFormats(memory) };
   const out = await generateText(
     { workspaceId: campaign.workspaceId, brandId: brand.id, purpose: "campaign_plan", subject: { type: "campaign", id: campaign.id } },
-    { system: brandSystemPrompt(brand), prompt: plannerPrompt(campaign, postCount, brand), json: true, temperature: 0.7 },
+    { system: brandSystemPrompt(brand, memoryBlock(memory)), prompt: plannerPrompt(campaign, postCount, brand, hints), json: true, temperature: 0.7 },
   );
 
   const plan = planSchema.parse(parseJsonObject(out.text));
@@ -107,7 +123,8 @@ export async function planCampaign(campaign: Campaign, brand: Brand) {
     const platform = allowed.has(p.platform) ? p.platform : campaign.platforms[i % campaign.platforms.length];
     const format = formats.includes(p.format) ? p.format : formats[i % formats.length];
     const timezone = isValidTimeZone(brand.timezone) ? brand.timezone : DEFAULT_TIMEZONE;
-    const time = p.time && isHhMm(p.time) ? p.time : slotFor(platform);
+    // The model's time, else the hour this brand's audience proved best, else the platform default.
+    const time = p.time && isHhMm(p.time) ? p.time : (times[platform] ?? slotFor(platform));
     return {
       workspaceId: campaign.workspaceId,
       campaignId: campaign.id,

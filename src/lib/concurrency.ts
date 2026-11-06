@@ -29,3 +29,9 @@ export const parallelism = () => ({
   image: num(process.env.AGENT_IMAGE_PARALLEL, 3),
   postsPerCall: num(process.env.AGENT_POSTS_PER_CALL, 4),
 });
+
+/**
+ * Pipelined posters: each poster starts the moment its caption is written (in a free job lane),
+ * instead of every poster waiting for the LAST caption of the campaign. AGENT_PIPELINE=false turns it off.
+ */
+export const pipelinePosters = () => process.env.AGENT_PIPELINE !== "false";

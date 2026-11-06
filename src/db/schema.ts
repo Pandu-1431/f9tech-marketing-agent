@@ -121,6 +121,8 @@ export const brands = pgTable(
     autopilotFormats: jsonb("autopilot_formats").$type<string[]>().default([]).notNull(),
     autopilotNextRunAt: timestamp("autopilot_next_run_at", { withTimezone: true }),
     autopilotLastRunAt: timestamp("autopilot_last_run_at", { withTimezone: true }),
+    // Analyst: when post results were last read and turned into learnings (brand_memory).
+    analystLastRunAt: timestamp("analyst_last_run_at", { withTimezone: true }),
     // Brand Kit v2. Photo look for every AI image (people, places, mood, banned looks).
     visualStyle: text("visual_style"),
     // Approved facts about the business (numbers, features, dates). The only facts AI may state.
@@ -446,3 +448,88 @@ export const publications = pgTable(
 
 export type Channel = typeof channels.$inferSelect;
 export type Publication = typeof publications.$inferSelect;
+
+/*
+ * Brand memory = what the AI team has learned about ONE brand. Every prompt reads it.
+ *   - learning (source analyst): "Reels get 2.4x the engagement of image posts on Instagram (8 posts)".
+ *   - feedback (source reviewer): a rejection note from a person, kept as a standing rule.
+ *   - fact/preference (source user): a line a person added by hand.
+ * `data` keeps the numbers behind a learning (e.g. the best hour per platform) for the planner.
+ * Per workspace AND brand, so nothing ever leaks between customers.
+ */
+export type MemoryTopic = "format" | "platform" | "time" | "template" | "hook" | "length" | "example" | "note";
+export const memory = pgTable(
+  "brand_memory",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => brands.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 20 }).notNull(), // learning | feedback | fact
+    topic: varchar("topic", { length: 30 }).default("note").notNull(),
+    text: text("text").notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>().default({}).notNull(),
+    source: varchar("source", { length: 20 }).default("analyst").notNull(), // analyst | reviewer | user
+    // How sure we are (number of posts behind it). Learnings with more evidence come first in prompts.
+    weight: integer("weight").default(1).notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("brand_memory_ws_brand").on(t.workspaceId, t.brandId, t.active)],
+);
+
+// Results of a published post, read back from the platform by the Analyst (one row per publication).
+export const postMetrics = pgTable(
+  "post_metrics",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => brands.id, { onDelete: "cascade" }),
+    postId: integer("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    publicationId: integer("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    platform: varchar("platform", { length: 30 }).notNull(),
+    impressions: integer("impressions").default(0).notNull(),
+    reach: integer("reach").default(0).notNull(),
+    likes: integer("likes").default(0).notNull(),
+    comments: integer("comments").default(0).notNull(),
+    shares: integer("shares").default(0).notNull(),
+    saves: integer("saves").default(0).notNull(),
+    views: integer("views").default(0).notNull(),
+    clicks: integer("clicks").default(0).notNull(),
+    // One number to compare posts with (see src/agent/analyst/score.ts).
+    score: numeric("score", { precision: 12, scale: 3 }).default("0").notNull(),
+    // How many times the numbers were read (they keep growing for a few days after publishing).
+    reads: integer("reads").default(1).notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("post_metrics_publication").on(t.publicationId), index("post_metrics_ws_brand").on(t.workspaceId, t.brandId)],
+);
+
+// Free-AI rest state (provider out for the day / busy), saved so a restart does not forget it.
+export const providerState = pgTable(
+  "provider_state",
+  {
+    id: serial("id").primaryKey(),
+    provider: varchar("provider", { length: 40 }).notNull(),
+    task: varchar("task", { length: 10 }).notNull(), // text | image | voice
+    restUntil: timestamp("rest_until", { withTimezone: true }).notNull(),
+    reason: text("reason"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("provider_state_provider_task").on(t.provider, t.task)],
+);
+
+export type BrandMemory = typeof memory.$inferSelect;
+export type PostMetric = typeof postMetrics.$inferSelect;

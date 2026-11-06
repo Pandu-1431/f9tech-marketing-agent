@@ -282,7 +282,7 @@ export async function reviewPost(
     if (post.designStatus === "designing" || post.reelStatus === "making") throw new BusyPostError();
   }
   const db = await getDb();
-  return db.transaction(async (tx) => {
+  const row = await db.transaction(async (tx) => {
     // Conditional update: only if nobody changed the post in the meantime.
     const [row] = await tx
       .update(schema.posts)
@@ -293,6 +293,12 @@ export async function reviewPost(
     await tx.insert(schema.approvals).values({ workspaceId, postId, version: by.version, decision, note, userId: by.userId });
     return row;
   });
+  // A rejection note is feedback the whole team should remember, not just this one rewrite.
+  if (decision === "rejected" && note?.trim()) {
+    const { rememberFeedback } = await import("@/agent/memory");
+    await rememberFeedback(workspaceId, post.brandId, note).catch(() => null);
+  }
+  return row;
 }
 
 /** True only when the post is approved AND nothing changed since. Publishing must check this. */

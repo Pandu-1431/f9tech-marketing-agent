@@ -58,7 +58,8 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
   return { refreshToken: String(t.refresh_token), accessToken: String(t.access_token) };
 }
 
-async function accessToken(refreshToken: string): Promise<string> {
+/** A fresh access token from the channel's refresh token (uploads and the Analyst's reads). */
+export async function accessToken(refreshToken: string): Promise<string> {
   const t = await tokenRequest({ refresh_token: refreshToken, grant_type: "refresh_token" });
   return String(t.access_token);
 }

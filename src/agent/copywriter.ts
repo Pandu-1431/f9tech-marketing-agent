@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Brand, Campaign, Post } from "@/db/schema";
-import { brandSystemPrompt } from "./brand-context";
+import { brandSystemPromptWithMemory } from "./brand-context";
 import { campaignBriefLines } from "./planner";
 import { parseJsonObject } from "./json";
 import { generateText } from "./router";
@@ -85,10 +85,10 @@ export function copyPrompt(campaign: Campaign, post: Post, notes: string[] = [])
 }
 
 /** One post idea -> caption, hashtags, image prompt and SEO keywords. */
-export async function writePostCopy(campaign: Campaign, brand: Brand, post: Post, opts: { notes?: string[] } = {}) {
+export async function writePostCopy(campaign: Campaign, brand: Brand, post: Post, opts: { notes?: string[]; memory?: string[] } = {}) {
   const out = await generateText(
     { workspaceId: post.workspaceId, brandId: brand.id, purpose: "post_copy", subject: { type: "post", id: post.id } },
-    { system: brandSystemPrompt(brand), prompt: copyPrompt(campaign, post, opts.notes), json: true, temperature: 0.85 },
+    { system: await brandSystemPromptWithMemory(brand, opts.memory), prompt: copyPrompt(campaign, post, opts.notes), json: true, temperature: 0.85 },
   );
   const copy = copySchema.parse(parseJsonObject(out.text));
   return normalise(copy, campaign, post, isDemoProvider(out.provider));
@@ -151,10 +151,10 @@ function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: P
 }
 
 /** Writes several posts in one call. Returns a map of post id -> copy (missing ids = not written). */
-export async function writePostsCopyBatch(campaign: Campaign, brand: Brand, posts: Post[]): Promise<Map<number, CopyResult>> {
+export async function writePostsCopyBatch(campaign: Campaign, brand: Brand, posts: Post[], opts: { memory?: string[] } = {}): Promise<Map<number, CopyResult>> {
   const out = await generateText(
     { workspaceId: campaign.workspaceId, brandId: brand.id, purpose: "post_copy_batch", subject: { type: "campaign", id: campaign.id } },
-    { system: brandSystemPrompt(brand), prompt: batchPrompt(campaign, posts), json: true, temperature: 0.85 },
+    { system: await brandSystemPromptWithMemory(brand, opts.memory), prompt: batchPrompt(campaign, posts), json: true, temperature: 0.85 },
   );
   const parsed = batchSchema.parse(parseJsonObject(out.text));
   const byId = new Map(posts.map((p) => [p.id, p]));

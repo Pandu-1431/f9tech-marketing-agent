@@ -7,7 +7,7 @@ import { getDb, schema } from "@/db";
  * generations log (both are per workspace, so nothing leaks between workspaces).
  */
 
-export type AgentKey = "strategist" | "copywriter" | "designer" | "video" | "checker" | "publisher";
+export type AgentKey = "strategist" | "copywriter" | "designer" | "video" | "checker" | "publisher" | "analyst";
 
 export const AGENTS: { key: AgentKey; name: string; role: string; emoji: string; color: string; jobs: string[]; purposes: string[] }[] = [
   { key: "strategist", name: "Strategist", role: "Picks the weekly theme and plans the calendar", emoji: "🧭", color: "#6366f1", jobs: ["autopilot.run", "campaign.plan"], purposes: ["weekly_theme", "campaign_plan"] },
@@ -16,6 +16,7 @@ export const AGENTS: { key: AgentKey; name: string; role: string; emoji: string;
   { key: "video", name: "Video maker", role: "Turns posts into reels with voice and music", emoji: "🎬", color: "#f59e0b", jobs: ["post.reel"], purposes: ["reel_script", "reel_scene", "reel_voiceover", "reel"] },
   { key: "checker", name: "Quality checker", role: "Checks spelling, brand rules and safe zones", emoji: "🛡️", color: "#10b981", jobs: [], purposes: [] },
   { key: "publisher", name: "Publisher", role: "Posts approved work on time, everywhere", emoji: "🚀", color: "#0ea5e9", jobs: ["post.publish"], purposes: [] },
+  { key: "analyst", name: "Analyst", role: "Reads post results and teaches the team what works", emoji: "📈", color: "#14b8a6", jobs: ["analyst.run"], purposes: [] },
 ];
 
 export type AgentStatus = {
@@ -52,7 +53,7 @@ export async function teamStatus(workspaceId: number): Promise<{ agents: AgentSt
   const db = await getDb();
   const since = new Date(Date.now() - 24 * 3600_000);
 
-  const [jobRows, genRows, checked, published, recent] = await Promise.all([
+  const [jobRows, genRows, checked, published, recent, learned] = await Promise.all([
     db
       .select({ type: schema.jobs.type, status: schema.jobs.status, n: sql<number>`count(*)::int` })
       .from(schema.jobs)
@@ -83,6 +84,10 @@ export async function teamStatus(workspaceId: number): Promise<{ agents: AgentSt
       .where(eq(schema.generations.workspaceId, workspaceId))
       .orderBy(desc(schema.generations.id))
       .limit(14),
+    db
+      .select({ n: sql<number>`count(*)::int`, last: sql<string>`max(${schema.postMetrics.fetchedAt})` })
+      .from(schema.postMetrics)
+      .where(and(eq(schema.postMetrics.workspaceId, workspaceId), gte(schema.postMetrics.fetchedAt, since))),
   ]);
 
   const agents: AgentStatus[] = AGENTS.map((a) => {
@@ -102,6 +107,10 @@ export async function teamStatus(workspaceId: number): Promise<{ agents: AgentSt
     if (a.key === "publisher") {
       doneToday = Number(published[0]?.n ?? 0);
       lastAt = published[0]?.last ? new Date(published[0].last) : null;
+    }
+    if (a.key === "analyst") {
+      doneToday = Number(learned[0]?.n ?? 0); // posts whose results were read today
+      lastAt = learned[0]?.last ? new Date(learned[0].last) : null;
     }
     // The checker works right after the designer and the video maker.
     const working = a.key === "checker" ? false : running > 0;

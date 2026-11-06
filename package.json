@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "test:e2e": "next build && playwright test",
-    "test:all": "tsc --noEmit && eslint && vitest run && npm run test:e2e"
+    "test:all": "tsc --noEmit && eslint && vitest run && npm run test:e2e",
+    "eval": "tsx scripts/eval-agents.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",

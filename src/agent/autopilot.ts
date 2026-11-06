@@ -5,7 +5,7 @@ import type { Brand } from "@/db/schema";
 import { createCampaign, setCampaignStatus } from "@/lib/data";
 import { CAMPAIGN_TYPE_KEYS } from "@/lib/campaign-types";
 import { DEFAULT_TIMEZONE, isValidTimeZone, utcToZoned, zonedToUtc } from "@/lib/schedule";
-import { brandServices, brandSystemPrompt } from "./brand-context";
+import { brandServices, brandSystemPromptWithMemory } from "./brand-context";
 import { parseJsonObject } from "./json";
 import { allowedFormats, FORMATS } from "./planner";
 import { datesIn } from "./quality";
@@ -139,7 +139,7 @@ export async function runAutopilot(workspaceId: number, brandId: number, opts: {
   try {
     const out = await generateText(
       { workspaceId, brandId, purpose: "weekly_theme" },
-      { system: brandSystemPrompt(brand), prompt: strategistPrompt(brand, week, recent.map((r) => r.theme)), json: true, temperature: 0.7 },
+      { system: await brandSystemPromptWithMemory(brand), prompt: strategistPrompt(brand, week, recent.map((r) => r.theme)), json: true, temperature: 0.7 },
     );
     pick = themeSchema.parse(parseJsonObject(out.text));
   } catch (err) {
