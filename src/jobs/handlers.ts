@@ -3,6 +3,7 @@ import { getDb, schema } from "@/db";
 import { writePostCopy, writePostsCopyBatch } from "@/agent/copywriter";
 import { chunk, mapLimit, parallelism, pipelinePosters } from "@/lib/concurrency";
 import { memoryLines } from "@/agent/memory";
+import { exemplarLines } from "@/agent/training/exemplars";
 import { planCampaign } from "@/agent/planner";
 import { QuotaExceededError } from "@/agent/router";
 import { designPost } from "@/agent/designer";
@@ -65,6 +66,8 @@ const writeCampaignJob: Handler = async (payload) => {
   // The brand's memory (reviewer rules, what worked) is loaded once here, not once per post.
   const { text: parallel, postsPerCall } = parallelism();
   const memory = await memoryLines(workspaceId, brand.id);
+  // The brand's own best posts (measured, edited-then-approved, approved) as style examples.
+  const examples = await exemplarLines(workspaceId, brand.id, campaign.platforms);
   const { enqueue } = await import("./queue");
   let failures = 0;
   let limitError: Error | null = null;
@@ -73,7 +76,7 @@ const writeCampaignJob: Handler = async (payload) => {
     if (limitError) return;
     let written = new Map<number, Awaited<ReturnType<typeof writePostCopy>>>();
     try {
-      written = await writePostsCopyBatch(campaign, brand, batch, { memory });
+      written = await writePostsCopyBatch(campaign, brand, batch, { memory, examples });
     } catch (err) {
       if (err instanceof QuotaExceededError || err instanceof TrialEndedError) {
         limitError = err;
@@ -83,7 +86,7 @@ const writeCampaignJob: Handler = async (payload) => {
     }
     for (const post of batch) {
       try {
-        const { demo, ...copy } = written.get(post.id) ?? (await writePostCopy(campaign, brand, post, { memory }));
+        const { demo, ...copy } = written.get(post.id) ?? (await writePostCopy(campaign, brand, post, { memory, examples }));
         await updatePost(workspaceId, post.id, { ...copy, status: "drafted", designStatus: pipelinePosters() ? "designing" : post.designStatus });
         await setDemoPart(workspaceId, post.id, "text", demo);
         await recordPostVersion(workspaceId, post.id, "ai_write");
@@ -136,7 +139,8 @@ const rewritePostJob: Handler = async (payload) => {
   try {
     // The reviewer's note and the quality checker's findings tell the copywriter what to change.
     const notes = [post.reviewNote ?? "", ...fixNotes(post.qcIssues ?? [])];
-    const { demo, ...copy } = await writePostCopy(campaign, brand, post, { notes });
+    const examples = await exemplarLines(workspaceId, brand.id, [post.platform]);
+    const { demo, ...copy } = await writePostCopy(campaign, brand, post, { notes, examples });
     await updatePost(workspaceId, post.id, { ...copy, status: "drafted", reviewNote: null, designStatus: "designing", lastError: null });
     await setDemoPart(workspaceId, post.id, "text", demo);
     await recordPostVersion(workspaceId, post.id, "ai_rewrite");
@@ -292,6 +296,47 @@ const autopilotJob: Handler = async (payload) => {
 const analystJob: Handler = async (payload) => {
   const { runAnalyst } = await import("@/agent/analyst");
   await runAnalyst(Number(payload.workspaceId), Number(payload.brandId), { now: payload.at ? new Date(String(payload.at)) : undefined });
+  // Fresh numbers: refresh the brand's Google Sheet too (when one is connected).
+  const { hasSheet } = await import("@/agent/sheets");
+  if (await hasSheet(Number(payload.workspaceId), Number(payload.brandId))) {
+    const { enqueue } = await import("./queue");
+    await enqueue("sheets.sync", { workspaceId: Number(payload.workspaceId), brandId: Number(payload.brandId) }, Number(payload.workspaceId));
+  }
+};
+
+/** Learn a writing rule from a person's edit of an AI caption (queued when the post is approved). */
+const learnEditJob: Handler = async (payload) => {
+  const workspaceId = Number(payload.workspaceId);
+  const brand = await getBrand(workspaceId, Number(payload.brandId));
+  if (!brand) return;
+  const { learnFromEdit } = await import("@/agent/training/edit-lesson");
+  try {
+    await learnFromEdit(workspaceId, brand, Number(payload.postId));
+  } catch (err) {
+    // A lesson is a bonus: never retry into the free quota for it.
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) return;
+    throw err;
+  }
+};
+
+/** SEO kit: real searches -> keywords, questions and hashtag sets for the brand. */
+const seoKitJob: Handler = async (payload) => {
+  const workspaceId = Number(payload.workspaceId);
+  const brand = await getBrand(workspaceId, Number(payload.brandId));
+  if (!brand) throw permanent("Brand not found");
+  const { buildSeoKit } = await import("@/agent/seo");
+  try {
+    await buildSeoKit(workspaceId, brand);
+  } catch (err) {
+    if (err instanceof QuotaExceededError || err instanceof TrialEndedError) throw permanent(err.message);
+    throw err;
+  }
+};
+
+/** Google Sheet: rewrite the brand's post tracker sheet. */
+const sheetsSyncJob: Handler = async (payload) => {
+  const { syncBrandSheet } = await import("@/agent/sheets");
+  await syncBrandSheet(Number(payload.workspaceId), Number(payload.brandId));
 };
 
 /** Publisher: send one approved post version to its channel. */
@@ -314,4 +359,7 @@ export const handlers = {
   "campaign.design": designCampaignJob,
   "post.design": designPostJob,
   "post.reel": reelPostJob,
+  "post.learn_edit": learnEditJob,
+  "brand.seo": seoKitJob,
+  "sheets.sync": sheetsSyncJob,
 } satisfies Record<string, Handler>;

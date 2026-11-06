@@ -1,4 +1,13 @@
 import crypto from "node:crypto";
+import { YOUTUBE_SCOPES } from "@/agent/publish/youtube";
+import { GBP_SCOPES } from "@/agent/publish/google-business";
+import { SHEETS_SCOPES } from "@/agent/sheets";
+
+/** What a "Sign in with Google" round trip connects. Also the query key the brand page reads the result from. */
+export type GoogleService = "youtube" | "gbp" | "sheets";
+export const SERVICE_SCOPES: Record<GoogleService, string[]> = { youtube: YOUTUBE_SCOPES, gbp: GBP_SCOPES, sheets: SHEETS_SCOPES };
+export const googleService = (v: string | null | undefined): GoogleService => (v === "gbp" || v === "sheets" ? v : "youtube");
+export const OAUTH_SERVICE_COOKIE = "ma_oauth_svc";
 
 /** Where Google sends the user back: APP_URL in production, else the address the app was opened at. */
 export function googleRedirectUri(requestUrl: string): string {

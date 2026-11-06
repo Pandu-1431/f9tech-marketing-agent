@@ -20,12 +20,12 @@ export function googleConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
-export function googleAuthUrl(redirectUri: string, state: string): string {
+export function googleAuthUrl(redirectUri: string, state: string, scopes: string[] = YOUTUBE_SCOPES): string {
   const u = new URL(AUTH_URL());
   u.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID ?? "");
   u.searchParams.set("redirect_uri", redirectUri);
   u.searchParams.set("response_type", "code");
-  u.searchParams.set("scope", YOUTUBE_SCOPES.join(" "));
+  u.searchParams.set("scope", scopes.join(" "));
   u.searchParams.set("access_type", "offline"); // we need a refresh token
   u.searchParams.set("prompt", "consent"); // always return a refresh token
   u.searchParams.set("include_granted_scopes", "true");
@@ -44,7 +44,7 @@ async function tokenRequest(params: Record<string, string>): Promise<Record<stri
     const msg = `Google sign-in: ${String(json.error_description ?? json.error ?? res.status)}`;
     // invalid_grant = the user revoked access or the refresh token expired: connect again.
     if (json.error === "invalid_grant" || json.error === "invalid_client" || res.status === 400 || res.status === 401) {
-      throw new PublishConfigError(`${msg}. Click "Connect YouTube" again.`);
+      throw new PublishConfigError(`${msg}. Sign in with Google again (Reconnect).`);
     }
     throw new Error(msg);
   }

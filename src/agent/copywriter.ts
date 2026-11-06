@@ -64,7 +64,7 @@ function fixLines(notes: string[] = []): string[] {
     : [];
 }
 
-export function copyPrompt(campaign: Campaign, post: Post, notes: string[] = []): string {
+export function copyPrompt(campaign: Campaign, post: Post, notes: string[] = [], examples: string[] = []): string {
   return [
     "TASK: POST_COPY",
     `CAMPAIGN THEME: ${campaign.theme}`,
@@ -80,15 +80,16 @@ export function copyPrompt(campaign: Campaign, post: Post, notes: string[] = [])
     ...ctaRules(campaign),
     ...posterRules(),
     ...fixLines(notes),
+    ...examples,
     'Reply with JSON only: {"caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_subline": "...", "poster_kicker": "...", "poster_cta": "...", "poster_template": "band"}',
   ].join("\n");
 }
 
 /** One post idea -> caption, hashtags, image prompt and SEO keywords. */
-export async function writePostCopy(campaign: Campaign, brand: Brand, post: Post, opts: { notes?: string[]; memory?: string[] } = {}) {
+export async function writePostCopy(campaign: Campaign, brand: Brand, post: Post, opts: { notes?: string[]; memory?: string[]; examples?: string[] } = {}) {
   const out = await generateText(
     { workspaceId: post.workspaceId, brandId: brand.id, purpose: "post_copy", subject: { type: "post", id: post.id } },
-    { system: await brandSystemPromptWithMemory(brand, opts.memory), prompt: copyPrompt(campaign, post, opts.notes), json: true, temperature: 0.85 },
+    { system: await brandSystemPromptWithMemory(brand, opts.memory), prompt: copyPrompt(campaign, post, opts.notes, opts.examples), json: true, temperature: 0.85 },
   );
   const copy = copySchema.parse(parseJsonObject(out.text));
   return normalise(copy, campaign, post, isDemoProvider(out.provider));
@@ -108,7 +109,7 @@ const batchSchema = z.object({
   posts: z.array(copySchema.extend({ id: z.coerce.number() })).min(1),
 });
 
-export function batchPrompt(campaign: Campaign, posts: Post[]): string {
+export function batchPrompt(campaign: Campaign, posts: Post[], examples: string[] = []): string {
   return [
     "TASK: POST_COPY_BATCH",
     `CAMPAIGN THEME: ${campaign.theme}`,
@@ -124,6 +125,7 @@ export function batchPrompt(campaign: Campaign, posts: Post[]): string {
     "SEO/SMO: use 1-3 search keywords people would type for this, naturally, early in the text. seo_keywords = 4-8 phrases a person would search on Google, YouTube or the Play Store (mix short and long-tail, include the city or language when relevant).",
     ...ctaRules(campaign),
     ...posterRules(),
+    ...examples,
     'Reply with JSON only: {"posts": [{"id": 123, "caption": "...", "hashtags": ["#..."], "image_prompt": "...", "seo_keywords": ["..."], "poster_headline": "...", "poster_subline": "...", "poster_kicker": "...", "poster_cta": "...", "poster_template": "tip"}]}',
   ].join("\n");
 }
@@ -151,10 +153,10 @@ function normalise(copy: z.infer<typeof copySchema>, campaign: Campaign, post: P
 }
 
 /** Writes several posts in one call. Returns a map of post id -> copy (missing ids = not written). */
-export async function writePostsCopyBatch(campaign: Campaign, brand: Brand, posts: Post[], opts: { memory?: string[] } = {}): Promise<Map<number, CopyResult>> {
+export async function writePostsCopyBatch(campaign: Campaign, brand: Brand, posts: Post[], opts: { memory?: string[]; examples?: string[] } = {}): Promise<Map<number, CopyResult>> {
   const out = await generateText(
     { workspaceId: campaign.workspaceId, brandId: brand.id, purpose: "post_copy_batch", subject: { type: "campaign", id: campaign.id } },
-    { system: await brandSystemPromptWithMemory(brand, opts.memory), prompt: batchPrompt(campaign, posts), json: true, temperature: 0.85 },
+    { system: await brandSystemPromptWithMemory(brand, opts.memory), prompt: batchPrompt(campaign, posts, opts.examples), json: true, temperature: 0.85 },
   );
   const parsed = batchSchema.parse(parseJsonObject(out.text));
   const byId = new Map(posts.map((p) => [p.id, p]));

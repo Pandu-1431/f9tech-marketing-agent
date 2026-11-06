@@ -298,6 +298,19 @@ export async function reviewPost(
     const { rememberFeedback } = await import("@/agent/memory");
     await rememberFeedback(workspaceId, post.brandId, note).catch(() => null);
   }
+  // Approved after a person edited the text: queue a small job that learns the rule behind the edit.
+  if (decision === "approved") {
+    const db2 = await getDb();
+    const humanEdit = await db2
+      .select({ id: schema.postVersions.id })
+      .from(schema.postVersions)
+      .where(and(eq(schema.postVersions.postId, postId), eq(schema.postVersions.reason, "caption")))
+      .limit(1);
+    if (humanEdit.length) {
+      const { enqueue } = await import("@/jobs/queue");
+      await enqueue("post.learn_edit", { workspaceId, brandId: post.brandId, postId }, workspaceId).catch(() => null);
+    }
+  }
   return row;
 }
 

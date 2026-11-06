@@ -86,7 +86,8 @@ tests/                 vitest: tenant isolation, limits, router, pipeline
 - [x] Layer 3 — Design studio: logo upload, AI backgrounds (Cloudflare / Hugging Face / offline), poster templates with logo + headline + button, per-platform sizes, asset library, 21-day free trial
 - [x] Video Studio — reel script → scene images → voice (Cloudflare MeloTTS / Piper / silent) → subtitles, logo, progress bar → slow zoom, fades, music → 1080×1920 MP4
 - [x] AI connections page — status of every provider, where to get each free key, one-click Test
-- [ ] Layer 4 — SEO + SMO: keyword/trend suggestions, hashtag sets, best time to post, Google Business Profile posts
-- [ ] Layer 5 — tracking: in-app tracker + Google Sheet sync per business account
-- [ ] Layer 6 — publishing to Facebook + Instagram (Meta Graph API), analytics pull
+- [x] Training center — the team learns from people: approved posts become few-shot examples in every copy prompt, a person's edit becomes a brand rule (one small AI call on approval), and approvals/edits/rejections export as SFT + DPO JSONL for optional fine-tuning (`/brands/<id>/training`)
+- [x] Layer 4 — SEO + SMO: SEO kit per business (Google + YouTube autocomplete → keyword clusters with intent, questions, brand/niche/local/broad hashtag sets, used by every caption), best time to post from results, Google Business Profile posts
+- [x] Layer 5 — tracking: Tracker page (filters, CSV) + Google Sheet sync per business account (daily + "Sync now")
+- [x] Layer 6 — publishing to Facebook, Instagram, YouTube Shorts, Telegram, Google Business Profile; Analyst pulls results
 - [ ] Layer 7 — client reviewer invites, polish, deploy to droplet

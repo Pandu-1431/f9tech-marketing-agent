@@ -129,6 +129,7 @@ export async function reviewPostAction(postId: number, decision: "approved" | "r
     // Demo / busy / stale: the UI shows the reason on the card; these are the server-side guards.
     if (!(err instanceof DemoContentError || err instanceof StaleVersionError || err instanceof BusyPostError)) throw err;
   }
+  if (decision === "approved") kickJobs(); // learn from the person's edit, if there was one
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
 

@@ -3,6 +3,10 @@ export type PublishInput = {
   text: string;
   image?: { data: Buffer; mime: string; publicUrl?: string | null } | null;
   video?: { data: Buffer; mime: string; publicUrl?: string | null } | null;
+  /** The campaign's call-to-action link (used as a button where the platform has one). */
+  link?: string | null;
+  /** Language code of the post, e.g. "en", "hi", "te". */
+  language?: string;
 };
 
 export type PublishResult = { externalId: string; url: string | null };

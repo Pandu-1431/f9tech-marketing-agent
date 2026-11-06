@@ -85,6 +85,16 @@ export const invites = pgTable(
 );
 
 // A brand = one business account inside a workspace. Its fields are the Brand Kit.
+/** Built by src/agent/seo.ts; read by every writing prompt. */
+export type SeoKit = {
+  keywords: { phrase: string; intent: "learn" | "compare" | "buy" | "local"; cluster: string }[];
+  hashtagSets: { brand: string[]; niche: string[]; local: string[]; broad: string[] };
+  questions: string[];
+  /** Raw suggestions the kit was built from (Google + YouTube autocomplete). */
+  suggestions: string[];
+  generatedAt: string;
+};
+
 export const brands = pgTable(
   "brands",
   {
@@ -127,6 +137,8 @@ export const brands = pgTable(
     visualStyle: text("visual_style"),
     // Approved facts about the business (numbers, features, dates). The only facts AI may state.
     keyFacts: text("key_facts"),
+    // SEO kit: keywords people really search + hashtag sets, built from search suggestions (src/agent/seo.ts).
+    seoKit: jsonb("seo_kit").$type<SeoKit | null>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -409,7 +421,7 @@ export const channels = pgTable(
     brandId: integer("brand_id")
       .notNull()
       .references(() => brands.id, { onDelete: "cascade" }),
-    platform: varchar("platform", { length: 30 }).notNull(), // telegram | facebook | instagram
+    platform: varchar("platform", { length: 30 }).notNull(), // telegram | facebook | instagram | youtube | google_business | google_sheets
     name: varchar("name", { length: 200 }).notNull(), // "@chakravyuh_upsc", page name...
     // telegram: { chatId } · facebook: { pageId } · instagram: { igUserId }
     config: jsonb("config").$type<Record<string, string>>().default({}).notNull(),

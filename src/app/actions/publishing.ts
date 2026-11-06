@@ -50,3 +50,12 @@ export async function publishNowAction(postId: number) {
   }
   revalidatePath(`/campaigns/${post.campaignId}`);
 }
+
+/** Rewrite the brand's Google Sheet now (it also refreshes once a day). */
+export async function syncSheetNowAction(brandId: number) {
+  const { workspace } = await requireEditor();
+  if (!(await getBrand(workspace.id, brandId))) return;
+  await enqueue("sheets.sync", { workspaceId: workspace.id, brandId }, workspace.id);
+  kickJobs();
+  revalidatePath(`/brands/${brandId}`);
+}

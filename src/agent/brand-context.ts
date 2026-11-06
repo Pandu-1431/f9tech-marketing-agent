@@ -1,5 +1,6 @@
 import type { Brand } from "@/db/schema";
 import { memoryLines } from "./memory";
+import { seoKitLines } from "./seo-lines";
 import { brandFactsBlock, simpleLanguageRules } from "./style";
 
 const list = (items: string[] | null | undefined) => (items && items.length ? items.join(", ") : "not set");
@@ -42,6 +43,7 @@ export function brandSystemPrompt(brand: Brand, memory: string[] = []): string {
     `Do: ${brand.dos ?? "not set"}`,
     `Don't: ${brand.donts ?? "not set"}`,
     ...brandFactsBlock(brand),
+    ...seoKitLines(brand.seoKit),
     "",
     ...simpleLanguageRules(brand),
     ...memory,

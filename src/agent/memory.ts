@@ -12,7 +12,7 @@ import type { BrandMemory, MemoryTopic } from "@/db/schema";
  */
 
 export type MemoryKind = "learning" | "feedback" | "fact";
-export type MemorySource = "analyst" | "reviewer" | "user";
+export type MemorySource = "analyst" | "reviewer" | "editor" | "user";
 
 export type MemoryInput = {
   kind: MemoryKind;
@@ -86,8 +86,14 @@ export async function replaceLearnings(workspaceId: number, brandId: number, lea
 /**
  * A reviewer rejected a post with a note: keep it as a standing rule ("Don't mention prices",
  * "Too formal, write like a friend"). Only the newest MAX_FEEDBACK rules stay active.
+ * Also used for rules learned from a person's edits (source "editor").
  */
-export async function rememberFeedback(workspaceId: number, brandId: number, note: string | null | undefined): Promise<BrandMemory | null> {
+export async function rememberFeedback(
+  workspaceId: number,
+  brandId: number,
+  note: string | null | undefined,
+  source: Extract<MemorySource, "reviewer" | "editor"> = "reviewer",
+): Promise<BrandMemory | null> {
   const text = clean(note ?? "");
   if (text.length < 4) return null;
   const db = await getDb();
@@ -102,7 +108,7 @@ export async function rememberFeedback(workspaceId: number, brandId: number, not
     const [row] = await db.update(schema.memory).set({ weight: same.weight + 1, updatedAt: new Date() }).where(eq(schema.memory.id, same.id)).returning();
     return row;
   }
-  const row = await remember(workspaceId, brandId, { kind: "feedback", topic: "note", text, source: "reviewer" });
+  const row = await remember(workspaceId, brandId, { kind: "feedback", topic: "note", text, source });
   const extra = existing.slice(MAX_FEEDBACK - 1).map((m) => m.id);
   if (extra.length) await db.update(schema.memory).set({ active: false, updatedAt: new Date() }).where(inArray(schema.memory.id, extra));
   return row;

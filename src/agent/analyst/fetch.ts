@@ -99,6 +99,7 @@ export const READERS: Record<string, MetricsReader | null> = {
   instagram: instagramMetrics,
   youtube: youtubeMetrics,
   telegram: null, // not measurable through the Bot API
+  google_business: null, // local post insights are not in the public API
 };
 
 /** Reads the metrics for a platform; null when that platform cannot be measured. */

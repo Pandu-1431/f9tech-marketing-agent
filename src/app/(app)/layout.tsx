@@ -17,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/campaigns", label: "Campaigns" },
     { href: "/calendar", label: "Calendar" },
     { href: "/library", label: "Library" },
+    { href: "/tracker", label: "Tracker" },
     ...(canEditContent(role) ? [{ href: "/settings/ai", label: "AI connections" }] : []),
     ...(canManageTeam(role) ? [{ href: "/settings/team", label: "Team" }] : []),
   ];

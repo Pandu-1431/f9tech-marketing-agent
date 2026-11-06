@@ -7,6 +7,7 @@ import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { publishFacebook, publishInstagram, testFacebook, testInstagram } from "./meta";
 import { publishTelegram, testTelegram } from "./telegram";
 import { publishYouTube, testYouTube } from "./youtube";
+import { publishGoogleBusiness, testGoogleBusiness } from "./google-business";
 import { PublishConfigError, type ChannelAuth, type PublishInput, type PublishResult } from "./types";
 
 /*
@@ -15,7 +16,7 @@ import { PublishConfigError, type ChannelAuth, type PublishInput, type PublishRe
  * at the post's scheduled time. A version is never sent twice to the same channel.
  */
 
-export const CHANNEL_PLATFORMS = ["telegram", "facebook", "instagram", "youtube"] as const;
+export const CHANNEL_PLATFORMS = ["telegram", "facebook", "instagram", "youtube", "google_business"] as const;
 export type ChannelPlatform = (typeof CHANNEL_PLATFORMS)[number];
 
 const ADAPTERS: Record<ChannelPlatform, { test: (a: ChannelAuth) => Promise<string>; publish: (a: ChannelAuth, i: PublishInput) => Promise<PublishResult> }> = {
@@ -23,6 +24,7 @@ const ADAPTERS: Record<ChannelPlatform, { test: (a: ChannelAuth) => Promise<stri
   facebook: { test: testFacebook, publish: publishFacebook },
   instagram: { test: testInstagram, publish: publishInstagram },
   youtube: { test: testYouTube, publish: publishYouTube },
+  google_business: { test: testGoogleBusiness, publish: publishGoogleBusiness },
 };
 
 export const isChannelPlatform = (p: string): p is ChannelPlatform => (CHANNEL_PLATFORMS as readonly string[]).includes(p);
@@ -33,8 +35,11 @@ export async function connectChannel(workspaceId: number, brandId: number, platf
   return saveChannel(workspaceId, brandId, platform, name, token, config);
 }
 
-/** Save (or replace) a channel whose credentials were already checked (e.g. after Google sign-in). */
-export async function saveChannel(workspaceId: number, brandId: number, platform: ChannelPlatform, name: string, token: string, config: Record<string, string>) {
+/**
+ * Save (or replace) a channel whose credentials were already checked (e.g. after Google sign-in).
+ * Also stores non-publishing connections such as "google_sheets" (one per brand and platform).
+ */
+export async function saveChannel(workspaceId: number, brandId: number, platform: ChannelPlatform | "google_sheets", name: string, token: string, config: Record<string, string>) {
   const db = await getDb();
   await db.delete(schema.channels).where(and(eq(schema.channels.workspaceId, workspaceId), eq(schema.channels.brandId, brandId), eq(schema.channels.platform, platform)));
   const [row] = await db.insert(schema.channels).values({ workspaceId, brandId, platform, name, config, secret: encryptSecret(token) }).returning();
@@ -96,6 +101,15 @@ export async function queuePublication(workspaceId: number, postId: number): Pro
 
 const MAX_ATTEMPTS = 3;
 
+/** "Telugu" -> "te" (Google Business Profile wants a language code). */
+export function languageCode(language: string | null | undefined): string {
+  const l = (language ?? "").toLowerCase();
+  if (l.includes("hindi")) return "hi";
+  if (l.includes("telugu")) return "te";
+  if (l.includes("tamil")) return "ta";
+  return "en";
+}
+
 /** Send one queued publication. */
 export async function sendPublication(workspaceId: number, publicationId: number): Promise<void> {
   const db = await getDb();
@@ -121,7 +135,12 @@ export async function sendPublication(workspaceId: number, publicationId: number
     const text = [version.caption ?? "", version.hashtags.join(" ")].filter(Boolean).join("\n\n").trim();
     const video = post?.format === "reel" ? await media(version.videoAssetId) : null;
     const image = video || post?.format === "text" ? null : await media(version.posterAssetId);
-    const result = await ADAPTERS[channel.platform as ChannelPlatform].publish({ token: decryptSecret(channel.secret), config: channel.config }, { text, image, video });
+    const [campaign] = post ? await db.select({ ctaUrl: schema.campaigns.ctaUrl }).from(schema.campaigns).where(eq(schema.campaigns.id, post.campaignId)) : [];
+    const [brand] = post ? await db.select({ language: schema.brands.language }).from(schema.brands).where(eq(schema.brands.id, post.brandId)) : [];
+    const result = await ADAPTERS[channel.platform as ChannelPlatform].publish(
+      { token: decryptSecret(channel.secret), config: channel.config },
+      { text, image, video, link: campaign?.ctaUrl ?? null, language: languageCode(brand?.language) },
+    );
     await db
       .update(schema.publications)
       .set({ status: "sent", externalId: result.externalId, url: result.url, error: null, publishedAt: new Date() })

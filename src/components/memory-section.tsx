@@ -15,7 +15,7 @@ const KIND_LABEL: Record<string, { text: string; cls: string }> = {
 
 export function MemorySection({ brand, memory, measured }: { brand: Brand; memory: BrandMemory[]; measured: number }) {
   return (
-    <section className="card space-y-4" data-testid="brand-memory">
+    <section id="memory" className="card space-y-4" data-testid="brand-memory">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">Brand memory</h2>
@@ -36,7 +36,7 @@ export function MemorySection({ brand, memory, measured }: { brand: Brand; memor
       ) : (
         <ul className="divide-y divide-zinc-100 text-sm">
           {memory.map((m) => {
-            const k = KIND_LABEL[m.kind] ?? KIND_LABEL.fact;
+            const k = m.source === "editor" ? { text: "From an edit", cls: "bg-amber-50 text-amber-700" } : (KIND_LABEL[m.kind] ?? KIND_LABEL.fact);
             return (
               <li key={m.id} className="flex flex-wrap items-start gap-2 py-2">
                 <span className={`badge ${k.cls}`}>{k.text}</span>

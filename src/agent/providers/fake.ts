@@ -108,6 +108,24 @@ export class FakeProvider implements TextProvider {
         ],
         cta: "Order on WhatsApp",
       });
+    } else if (p.includes("TASK: SEO_KIT")) {
+      const searches = [...p.matchAll(/^- (.+)$/gm)].map((m) => m[1]).filter((s) => !s.startsWith("none available"));
+      const city = (/City \/ market: ([^\n]+)/.exec(req.system)?.[1] ?? "").replace("not set", "").trim();
+      const brand = (/Name: ([^\n]+)/.exec(req.system)?.[1] ?? "brand").replace(/\s+/g, "");
+      text = JSON.stringify({
+        keywords: (searches.length ? searches : ["best offers near me", "how to choose a gift"]).slice(0, 12).map((phrase, i) => ({
+          phrase,
+          intent: ["learn", "compare", "buy", "local"][i % 4],
+          cluster: phrase.split(" ").slice(0, 2).join(" "),
+        })),
+        questions: ["What is the best gift for Diwali?", "Where to buy fresh sweets near me?"],
+        hashtag_sets: { brand: [`#${brand}`], niche: ["#freshsweets", "#giftbox"], local: city ? [`#${city.replace(/\s+/g, "")}`] : [], broad: ["#diwali", "#festive"] },
+      });
+    } else if (p.includes("TASK: EDIT_LESSON")) {
+      const before = /BEFORE: ([^\n]*)/.exec(p)?.[1] ?? "";
+      const after = /AFTER: ([^\n]*)/.exec(p)?.[1] ?? "";
+      const shorter = after.length < before.length * 0.8;
+      text = JSON.stringify({ rule: shorter ? "Keep captions short and get to the point in the first line." : "Write in a warmer, more personal voice.", general: true });
     } else {
       text = JSON.stringify({ ok: true });
     }
