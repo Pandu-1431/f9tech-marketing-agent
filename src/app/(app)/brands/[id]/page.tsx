@@ -10,6 +10,7 @@ import { SeoSection } from "@/components/seo-section";
 import { PresenterSection } from "@/components/presenter-section";
 import { DirectorSection } from "@/components/director-section";
 import { GoLiveChecklist } from "@/components/go-live";
+import { metaConfigured } from "@/agent/publish/meta-connect";
 import { Crumbs } from "@/components/ui/crumbs";
 import { goLiveStatus } from "@/lib/go-live";
 import { EnquirySection } from "@/components/enquiry-section";
@@ -28,10 +29,10 @@ import { requireEditor } from "@/lib/auth";
 import { getBrand, listProductShots } from "@/lib/data";
 import { publicUrl } from "@/lib/storage";
 
-export default async function EditBrandPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ youtube?: string; gbp?: string; sheets?: string; presenter?: string; onboarded?: string }> }) {
+export default async function EditBrandPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ youtube?: string; gbp?: string; sheets?: string; presenter?: string; onboarded?: string; meta?: string }> }) {
   const { workspace, role } = await requireEditor();
   const { id } = await params;
-  const { youtube, gbp, sheets, presenter, onboarded } = await searchParams;
+  const { youtube, gbp, sheets, presenter, onboarded, meta } = await searchParams;
   const brand = await getBrand(workspace.id, Number(id));
   if (!brand) notFound();
   const shots = (await listProductShots(workspace.id, brand.id)).map((s) => ({ id: s.id, url: publicUrl(s.storageKey), label: s.prompt ?? "app screen" }));
@@ -75,7 +76,7 @@ export default async function EditBrandPage({ params, searchParams }: { params: 
       <GoLiveChecklist brand={brand} s={await goLiveStatus(workspace.id, brand)} />
       <DirectorSection brand={brand} job={await directorJobState(workspace.id, brand.id)} campaigns={await planCampaigns(workspace.id, brand.id, brand.marketingPlan)} />
       <AutopilotForm brand={brand} />
-      <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} youtubeReady={googleConfigured()} youtubeStatus={youtube} gbpStatus={gbp} sheetsStatus={sheets} />
+      <ChannelsSection brand={brand} channels={await listChannels(workspace.id, brand.id)} youtubeReady={googleConfigured()} youtubeStatus={youtube} gbpStatus={gbp} sheetsStatus={sheets} metaStatus={meta} metaReady={metaConfigured()} />
       <EnquirySection
         brand={brand}
         url={`${(process.env.APP_URL ?? `http://${(await headers()).get("host") ?? "localhost:3000"}`).replace(/\/$/, "")}/l/${await leadCodeFor(workspace.id, brand.id)}`}

@@ -1,5 +1,7 @@
 import type { Brand, Channel } from "@/db/schema";
-import { connectChannelAction, removeChannelAction, syncSheetNowAction } from "@/app/actions/publishing";
+import { connectChannelAction, removeChannelAction, syncSheetNowAction, telegramConnectAction } from "@/app/actions/publishing";
+import { metaPasteTokenAction } from "@/app/actions/meta";
+import { TelegramConnect } from "./telegram-connect";
 import { ChannelForm } from "./channel-form";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 
@@ -22,6 +24,15 @@ const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
   "no-api": { ok: false, text: "Google has not given this project Business Profile API access yet. Request it (free), enable the 3 APIs, then try again." },
 };
 const GBP_OK = { ok: true, text: "Google Business Profile connected. Approved google_business posts now appear on Google Search and Maps." };
+const META_MESSAGES: Record<string, { ok: boolean; text: string }> = {
+  "connected-both": { ok: true, text: "Facebook Page and Instagram connected. Approved posts go to both." },
+  connected: { ok: true, text: "Facebook Page connected. Approved Facebook posts go to it." },
+  cancelled: { ok: false, text: "You cancelled the Facebook login. Click Connect with Facebook to try again." },
+  expired: { ok: false, text: "That took too long. Click Connect with Facebook again." },
+  failed: { ok: false, text: "Facebook login did not work. Check the app's redirect address (see the steps) and try again." },
+  "bad-token": { ok: false, text: "That token is too short. Copy the whole token." },
+  "not-configured": { ok: false, text: "\"Connect with Facebook\" needs META_APP_ID and META_APP_SECRET in the settings (see the steps), or paste a token below." },
+};
 const SHEET_OK = { ok: true, text: "Google Sheet created and filled. It refreshes daily and when you click Sync now." };
 
 export function ChannelsSection({
@@ -31,6 +42,8 @@ export function ChannelsSection({
   youtubeStatus,
   gbpStatus,
   sheetsStatus,
+  metaStatus,
+  metaReady = false,
 }: {
   brand: Brand;
   channels: Channel[];
@@ -38,7 +51,10 @@ export function ChannelsSection({
   youtubeStatus?: string;
   gbpStatus?: string;
   sheetsStatus?: string;
+  metaStatus?: string;
+  metaReady?: boolean;
 }) {
+  const meta = metaStatus ? META_MESSAGES[metaStatus] : undefined;
   const yt = youtubeStatus ? YOUTUBE_MESSAGES[youtubeStatus] : undefined;
   const gbp = gbpStatus ? (gbpStatus === "connected" ? GBP_OK : GOOGLE_MESSAGES[gbpStatus]) : undefined;
   const sheetMsg = sheetsStatus ? (sheetsStatus === "connected" ? SHEET_OK : GOOGLE_MESSAGES[sheetsStatus]) : undefined;
@@ -71,33 +87,35 @@ export function ChannelsSection({
         </ul>
       )}
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        <ChannelForm
-          title="Telegram channel"
-          help={<>Free and instant. 1) In Telegram, open @BotFather → /newbot, copy the token. 2) Add the bot to your channel as an admin who can post. 3) Channel = @yourchannel.</>}
-          fields={[
-            { name: "token", label: "Bot token", placeholder: "123456789:AA…", secret: true },
-            { name: "chatId", label: "Channel", placeholder: "@chakravyuh_upsc" },
-          ]}
-          action={connectChannelAction.bind(null, brand.id, "telegram")}
-        />
-        <ChannelForm
-          title="Facebook Page"
-          help={<>Needs a long-lived Page access token with pages_manage_posts (Meta for Developers → Graph API Explorer). Your own Page works without app review.</>}
-          fields={[
-            { name: "token", label: "Page access token", placeholder: "EAAG…", secret: true },
-            { name: "pageId", label: "Page ID", placeholder: "1234567890" },
-          ]}
-          action={connectChannelAction.bind(null, brand.id, "facebook")}
-        />
-        <ChannelForm
-          title="Instagram"
-          help={<>Professional account linked to your Facebook Page; token with instagram_content_publish. Needs public image storage (Supabase/R2) or APP_URL.</>}
-          fields={[
-            { name: "token", label: "Page access token", placeholder: "EAAG…", secret: true },
-            { name: "igUserId", label: "Instagram account ID", placeholder: "1784…" },
-          ]}
-          action={connectChannelAction.bind(null, brand.id, "instagram")}
-        />
+        <TelegramConnect action={telegramConnectAction.bind(null, brand.id)} connected={channels.find((c) => c.platform === "telegram")?.name} />
+        <div className="space-y-3 rounded-lg border border-zinc-200 p-3 md:col-span-1 lg:col-span-2" data-testid="meta-connect">
+          <p className="font-medium">Facebook Page + Instagram</p>
+          <p className="text-xs text-zinc-600">Log in with Facebook and pick your Page. The Instagram professional account linked to the Page comes with it. No tokens or IDs to copy.</p>
+          {metaReady ? (
+            <a href={`/api/oauth/meta/start?brandId=${brand.id}`} className="inline-flex items-center gap-2 rounded-lg bg-[#1877F2] px-4 py-2 text-sm font-semibold text-white hover:bg-[#166fe5]">
+              <span className="text-lg leading-none">f</span> Connect with Facebook
+            </a>
+          ) : (
+            <details className="text-xs text-zinc-600">
+              <summary className="cursor-pointer font-medium text-zinc-800">Turn on &quot;Connect with Facebook&quot; (one time, for the app owner)</summary>
+              <ol className="mt-1 list-decimal space-y-1 pl-4">
+                <li>developers.facebook.com → My Apps → Create app → type <b>Business</b>.</li>
+                <li>Add the product <b>Facebook Login for Business</b>. In its settings add the redirect URI <code>{"<this address>"}/api/oauth/meta/callback</code> (e.g. http://localhost:3000/api/oauth/meta/callback).</li>
+                <li>App settings → Basic: copy the <b>App ID</b> and <b>App secret</b> into the settings as <code>META_APP_ID</code> and <code>META_APP_SECRET</code>, then restart the app.</li>
+                <li>Your own Pages work right away. For other people&apos;s Pages, Meta must approve the app (App Review).</li>
+              </ol>
+            </details>
+          )}
+          <details className="text-xs text-zinc-600">
+            <summary className="cursor-pointer">Or paste a token instead</summary>
+            <form action={metaPasteTokenAction.bind(null, brand.id)} className="mt-2 flex gap-2">
+              <input className="input" name="token" type="password" placeholder="EAAG… (user or Page token from Graph API Explorer)" autoComplete="off" />
+              <button className="btn-secondary shrink-0">Find my Pages</button>
+            </form>
+            <p className="mt-1">The app finds your Pages and Instagram accounts; you pick one. No IDs needed.</p>
+          </details>
+          {meta && <p className={`text-sm ${meta.ok ? "text-emerald-700" : "text-red-700"}`} data-testid="meta-status">{meta.ok ? "✓ " : ""}{meta.text}</p>}
+        </div>
         <ChannelForm
           title="X (Twitter)"
           help={<>Free API tier (limited posts per month). developer.x.com → your app → User authentication: Read and Write → Keys and tokens: copy the API key + secret and generate the Access token + secret.</>}

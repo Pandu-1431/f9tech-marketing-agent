@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireEditor } from "@/lib/auth";
 import { getBrand, getPost } from "@/lib/data";
+import { findTelegramChats, sendTelegramHello } from "@/agent/publish/telegram";
 import { connectChannel, isChannelPlatform, queuePublication, removeChannel } from "@/agent/publish";
 import { enqueue, processJobs } from "@/jobs/queue";
 
@@ -66,4 +67,36 @@ export async function syncSheetNowAction(brandId: number) {
   await enqueue("sheets.sync", { workspaceId: workspace.id, brandId }, workspace.id);
   kickJobs();
   revalidatePath(`/brands/${brandId}`);
+}
+
+export type TelegramFindState = { error?: string; bot?: string; chats?: { id: string; title: string; username: string | null; canPost: boolean }[]; token?: string; ok?: string } | undefined;
+
+/**
+ * Telegram one-paste connect. Step 1 (intent "find"): read the bot token and list the channels the bot
+ * was added to. Step 2 (intent "use"): connect the chosen channel and send a real hello message to it.
+ */
+export async function telegramConnectAction(brandId: number, _prev: TelegramFindState, formData: FormData): Promise<TelegramFindState> {
+  const { workspace } = await requireEditor();
+  const brand = await getBrand(workspace.id, brandId);
+  if (!brand) return { error: "Not found" };
+  const token = field(formData, "token");
+  if (!/^\d{5,}:[\w-]{20,}$/.test(token)) return { error: "That does not look like a bot token. It looks like 123456789:AAE… (from @BotFather)." };
+  const chatId = field(formData, "chatId");
+  try {
+    if (!chatId) {
+      const { bot, chats } = await findTelegramChats(token);
+      return { bot, chats, token };
+    }
+    const ch = await connectChannel(workspace.id, brandId, "telegram", token, { chatId });
+    await sendTelegramHello({ token, config: { chatId } }, brand.name);
+    revalidatePath(`/brands/${brandId}`);
+    return { ok: `Connected to ${ch.name}. A test message was sent to the channel: check it in Telegram.`, token };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/Unauthorized|401|Not Found/i.test(msg)) return { error: "Telegram did not accept that token. Copy it again from @BotFather.", token };
+    if (/chat not found/i.test(msg)) return { error: "Telegram cannot find that channel. Add the bot to the channel as an admin first.", token };
+    if (/not enough rights|administrator|403/i.test(msg)) return { error: "The bot is in the channel but cannot post. Make it an admin with \"Post messages\".", token };
+    if (/webhook/i.test(msg)) return { error: "This bot is used by another app (it has a webhook). Create a new bot in @BotFather for this channel.", token };
+    return { error: `Could not connect: ${msg}`, token };
+  }
 }

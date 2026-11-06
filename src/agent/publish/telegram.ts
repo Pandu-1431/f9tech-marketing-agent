@@ -60,3 +60,35 @@ export async function publishTelegram(auth: ChannelAuth, input: PublishInput): P
   }
   return { externalId: String(result.message_id), url: linkFor(result.chat as Record<string, unknown>, result.message_id) };
 }
+
+export type TelegramChat = { id: string; title: string; username: string | null; canPost: boolean };
+
+/**
+ * One-paste connect: after the owner adds the bot to their channel as an admin, Telegram tells the
+ * bot (my_chat_member update). Read those and list the channels and groups the bot can post in.
+ */
+export async function findTelegramChats(token: string): Promise<{ bot: string; chats: TelegramChat[] }> {
+  const me = await call(token, "getMe", {});
+  const updates = (await call(token, "getUpdates", { allowed_updates: ["my_chat_member", "channel_post"], timeout: 0 })) as unknown as Record<string, unknown>[];
+  const chats = new Map<string, TelegramChat>();
+  for (const u of updates ?? []) {
+    const m = (u.my_chat_member ?? null) as Record<string, unknown> | null;
+    const post = (u.channel_post ?? null) as Record<string, unknown> | null;
+    const chat = ((m?.chat ?? post?.chat) ?? null) as Record<string, unknown> | null;
+    if (!chat || (chat.type !== "channel" && chat.type !== "supergroup" && chat.type !== "group")) continue;
+    const member = (m?.new_chat_member ?? null) as Record<string, unknown> | null;
+    const status = member ? String(member.status) : "administrator";
+    if (status === "left" || status === "kicked") {
+      chats.delete(String(chat.id));
+      continue;
+    }
+    const canPost = status === "administrator" && (chat.type !== "channel" || member?.can_post_messages !== false);
+    chats.set(String(chat.id), { id: String(chat.id), title: String(chat.title ?? chat.username ?? chat.id), username: chat.username ? String(chat.username) : null, canPost });
+  }
+  return { bot: String(me.username ?? "your bot"), chats: [...chats.values()] };
+}
+
+/** A real message in the channel, so the owner sees the connection work. */
+export async function sendTelegramHello(auth: ChannelAuth, businessName: string): Promise<void> {
+  await call(auth.token, "sendMessage", { chat_id: auth.config.chatId, text: `✅ ${businessName} is connected to MarketingAgent. Approved posts will appear here.` });
+}

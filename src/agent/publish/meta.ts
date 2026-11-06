@@ -14,7 +14,7 @@ export async function graph(method: "GET" | "POST", path: string, token: string,
   const target = new URL(url(path));
   let init: RequestInit = { method };
   if (method === "GET") {
-    target.searchParams.set("access_token", token);
+    if (token) target.searchParams.set("access_token", token);
     for (const [k, v] of Object.entries((body as Record<string, string>) ?? {})) target.searchParams.set(k, v);
   } else if (body instanceof FormData) {
     body.append("access_token", token);

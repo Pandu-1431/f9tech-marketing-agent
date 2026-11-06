@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Crumbs } from "@/components/ui/crumbs";
 import { notFound } from "next/navigation";
 import { requireEditor } from "@/lib/auth";
