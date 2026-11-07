@@ -8,6 +8,7 @@ import { creativeSpec } from "@/lib/formats";
 import { generateImage } from "./images/router";
 import { composePoster, isPosterTemplate, posterSize, type PosterTemplate } from "./images/poster";
 import { imagePrompt, siteLabel } from "./style";
+import { stockQuery } from "./images/stock";
 
 function backgroundPrompt(brand: Brand, post: Post, template: PosterTemplate): string {
   return imagePrompt(brand, post.imagePrompt || post.angle || "", template);
@@ -41,8 +42,8 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
 
   if (!background) {
     const img = await generateImage(
-      { workspaceId: post.workspaceId, brandId: brand.id, purpose: "post_background", subject: { type: "post", id: post.id } },
-      { prompt: backgroundPrompt(brand, post, template), width, height, colors: brand.colors, seed: post.id },
+      { workspaceId: post.workspaceId, brandId: brand.id, purpose: "post_background", subject: { type: "post", id: post.id }, prefer: brand.pictureSource === "ai" ? "ai" : "real" },
+      { prompt: backgroundPrompt(brand, post, template), query: stockQuery(post.imagePrompt || post.angle || brand.industry || ""), width, height, colors: brand.colors, seed: post.id },
     );
     background = img.data;
     backgroundProvider = img.provider;
@@ -60,6 +61,8 @@ export async function designPost(post: Post, brand: Brand, opts: { newBackground
       bytes: img.data.length,
       prompt: backgroundPrompt(brand, post, template),
       provider: img.provider,
+      sourceId: img.sourceId ?? null,
+      credit: img.credit ?? null,
       demo: isDemoProvider(img.provider),
     });
   }

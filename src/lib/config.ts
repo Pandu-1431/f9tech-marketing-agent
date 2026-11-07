@@ -140,7 +140,7 @@ export function httpTimeoutMs(): number {
 
 export type ImageProviderConfig = {
   name: string;
-  driver: "cloudflare" | "huggingface" | "pollinations" | "brand_art" | "fake";
+  driver: "cloudflare" | "huggingface" | "pollinations" | "stock" | "brand_art" | "fake";
   apiKey?: string;
   accountId?: string;
   model: string;
@@ -182,6 +182,9 @@ export function imageProviderConfig(name: string): ImageProviderConfig | null {
     case "pollinations":
       // No key. Fine for internal tests; check its terms before selling to customers.
       return { name, driver: "pollinations", model: e.POLLINATIONS_MODEL ?? "flux", dailyLimit: num(e.POLLINATIONS_DAILY_LIMIT, 100) };
+    case "stock":
+      // Real photos and video clips (Pexels 200/hour, Pixabay 100/minute, both free). Needs at least one key.
+      return { name, driver: "stock", model: "pexels+pixabay", apiKey: e.PEXELS_API_KEY || e.PIXABAY_API_KEY, dailyLimit: num(e.STOCK_DAILY_LIMIT, 2000) };
     case "brand_art":
       // Always works, free: a designed on-brand background (used when every image AI is out for the day).
       return { name, driver: "brand_art", model: "brand-art-1", dailyLimit: 1_000_000 };

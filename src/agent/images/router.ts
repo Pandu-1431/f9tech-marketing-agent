@@ -1,10 +1,11 @@
-import { and, count, eq, gte, ne } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull, ne } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { freePlan, imageChain, imageProviderConfig } from "@/lib/config";
 import { assertCanGenerate } from "@/lib/plan";
 import { QuotaExceededError, AllProvidersFailedError, bumpProvider, providerRequestsToday } from "../router";
 import { classifyLimit, imageProviderRest, nextUtcMidnight, pushSlot, restImageProvider, waitForSlot } from "./limits";
 import { ProviderError } from "../providers/types";
+import { StockImageProvider, stockConfigured } from "./stock";
 import {
   BrandArtImageProvider,
   CloudflareImageProvider,
@@ -42,6 +43,8 @@ export function buildImageProvider(name: string): { provider: ImageProvider; dai
       return cfg.apiKey ? { provider: new HuggingFaceImageProvider(cfg), dailyLimit: cfg.dailyLimit } : null;
     case "pollinations":
       return { provider: new PollinationsImageProvider(cfg), dailyLimit: cfg.dailyLimit };
+    case "stock":
+      return stockConfigured() ? { provider: new StockImageProvider(), dailyLimit: cfg.dailyLimit } : null;
     case "brand_art":
       return { provider: new BrandArtImageProvider(), dailyLimit: cfg.dailyLimit };
     case "fake":
@@ -63,24 +66,53 @@ export async function workspaceImageUsageThisMonth(workspaceId: number): Promise
         eq(schema.generations.task, "image"),
         eq(schema.generations.status, "ok"),
         ne(schema.generations.provider, "brand_art"), // local design work is free and unlimited
+        ne(schema.generations.provider, "stock"), // real photos are free
         gte(schema.generations.createdAt, start),
       ),
     );
   return Number(row?.n ?? 0);
 }
 
+export type PictureSource = "real" | "ai";
+
 /**
  * The chain from AGENT_IMAGE_CHAIN plus a last step that always works: "brand_art"
  * (a designed on-brand background), so posters and reels are never blocked by free limits.
  * AGENT_IMAGE_FALLBACK=off turns that off.
+ * Real photos ("stock", Pexels/Pixabay, skipped when no key): first when the business wants real
+ * photos, otherwise right after the image AIs and before the built-in backgrounds.
+ * AGENT_STOCK=off leaves them out.
  */
-export function fullImageChain(): string[] {
-  const chain = imageChain();
-  if (process.env.AGENT_IMAGE_FALLBACK === "off" || chain.includes("fake") || chain.includes("brand_art")) return chain;
-  return [...chain, "brand_art"];
+export function fullImageChain(prefer: PictureSource = "ai"): string[] {
+  const base = imageChain().filter((n) => n !== "stock");
+  const chain = process.env.AGENT_IMAGE_FALLBACK === "off" || base.includes("fake") || base.includes("brand_art") ? base : [...base, "brand_art"];
+  if (process.env.AGENT_STOCK === "off") return chain;
+  if (prefer === "real") return ["stock", ...chain];
+  const at = chain.findIndex((n) => n === "brand_art" || n === "fake");
+  return at < 0 ? [...chain, "stock"] : [...chain.slice(0, at), "stock", ...chain.slice(at)];
 }
 
-export type ImageContext = { workspaceId: number; brandId?: number | null; purpose: string; subject?: { type: string; id: number } };
+/** Real photos and clips this business already used, so the same one never shows up twice. */
+export async function usedStockIds(workspaceId: number, brandId: number | null | undefined): Promise<string[]> {
+  if (!brandId) return [];
+  const db = await getDb();
+  const rows = await db
+    .select({ id: schema.assets.sourceId })
+    .from(schema.assets)
+    .where(and(eq(schema.assets.workspaceId, workspaceId), eq(schema.assets.brandId, brandId), isNotNull(schema.assets.sourceId)))
+    .orderBy(desc(schema.assets.id))
+    .limit(1000);
+  return rows.map((r) => r.id!).filter(Boolean);
+}
+
+export type ImageContext = {
+  workspaceId: number;
+  brandId?: number | null;
+  purpose: string;
+  subject?: { type: string; id: number };
+  /** The business's choice: real photos first (default) or AI pictures first. */
+  prefer?: PictureSource;
+};
 
 export async function generateImage(ctx: ImageContext, req: ImageRequest): Promise<ImageResult & { provider: string; model: string }> {
   await assertCanGenerate(ctx.workspaceId);
@@ -108,7 +140,10 @@ export async function generateImage(ctx: ImageContext, req: ImageRequest): Promi
       ...extra,
     });
 
-  for (const name of fullImageChain()) {
+  const chain = fullImageChain(ctx.prefer ?? "ai");
+  if (chain.includes("stock") && !req.avoid && stockConfigured()) req = { ...req, avoid: await usedStockIds(ctx.workspaceId, ctx.brandId) };
+
+  for (const name of chain) {
     const built = buildImageProvider(name);
     if (!built) {
       errors.push(`${name}: not configured`);
@@ -135,7 +170,7 @@ export async function generateImage(ctx: ImageContext, req: ImageRequest): Promi
       try {
         const out = await built.provider.generate(req);
         await log(name, built.provider.model, started, { output: `${out.mime}, ${out.data.length} bytes` });
-        return { ...out, provider: name, model: built.provider.model };
+        return { ...out, provider: out.source ?? name, model: built.provider.model };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await log(name, built.provider.model, started, { status: "failed", error: message.slice(0, 2000) });

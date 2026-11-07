@@ -149,6 +149,25 @@ export function BrandForm({ brand, logoUrl, action, submitLabel, timeZones = ["A
           <p className="hint">Who and what should appear in your photos. Every AI image follows this.</p>
         </div>
         <div className="md:col-span-2">
+          <span className="label">Pictures in posts and videos</span>
+          <div className="mt-1 grid gap-2 sm:grid-cols-2">
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 p-3 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+              <input type="radio" name="pictureSource" value="real" defaultChecked={(brand?.pictureSource ?? "real") !== "ai"} className="mt-1" />
+              <span>
+                <span className="block text-sm font-semibold">Real photos and video clips (recommended)</span>
+                <span className="block text-xs text-zinc-600">Real people and places from Pexels and Pixabay, free. Looks human. AI pictures only when no real one fits.</span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 p-3 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+              <input type="radio" name="pictureSource" value="ai" defaultChecked={brand?.pictureSource === "ai"} className="mt-1" />
+              <span>
+                <span className="block text-sm font-semibold">AI pictures</span>
+                <span className="block text-xs text-zinc-600">Made to match your photo style. Good for ideas, drawings and things no camera can show.</span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div className="md:col-span-2">
           <label className="label" htmlFor="keyFacts">Key facts</label>
           <textarea
             className="input"

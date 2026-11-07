@@ -9,9 +9,20 @@ export type ImageRequest = {
   /** Brand colours, used by the offline provider. */
   colors?: string[];
   seed?: number;
+  /** Real-photo search words (default: taken from the prompt). */
+  query?: string;
+  /** Real photos this business already used ("pexels:123"): never picked again. */
+  avoid?: string[];
 };
 
-export type ImageResult = { data: Buffer; mime: string };
+export type ImageResult = {
+  data: Buffer;
+  mime: string;
+  /** Real photos: where it came from ("pexels"), its id and the credit line. */
+  source?: string;
+  sourceId?: string;
+  credit?: string;
+};
 
 export interface ImageProvider {
   readonly name: string;

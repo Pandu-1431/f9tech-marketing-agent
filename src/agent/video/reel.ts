@@ -7,7 +7,8 @@ import type { Brand, Campaign, Post, ReelScript, ReelStyle } from "@/db/schema";
 import { freePlan } from "@/lib/config";
 import { assertCanGenerate } from "@/lib/plan";
 import { getFile, newKey, putFile } from "@/lib/storage";
-import { generateImage } from "../images/router";
+import { generateImage, usedStockIds, type PictureSource } from "../images/router";
+import { findStockVideo, stockQuery, stockVideoConfigured } from "../images/stock";
 import { QuotaExceededError } from "../router";
 import { imagePrompt, siteLabel } from "../style";
 import { captionChunks, captionFrame, renderSceneFrame, REEL_H, REEL_W, textBackground } from "./frames";
@@ -25,8 +26,8 @@ import { mapLimit, parallelism } from "@/lib/concurrency";
 /*
  * Video Studio pipeline for one post:
  *   1. script   — AI writes 4-6 scenes (voiceover, on-screen text, image prompt)
- *   2. images   — one vertical AI image per scene (image router)
- *   3. voice    — each voiceover line becomes speech (voice router: Cloudflare / Piper / silent)
+ *   2. voice    — each voiceover line becomes speech (voice router: Cloudflare / Piper / silent)
+ *   3. picture  — a real video clip (Pexels / Pixabay) or one vertical photo per scene (image router)
  *   4. frames   — image + on-screen text + subtitles + logo + progress bar (sharp)
  *   5. video    — each scene gets a camera move (zoom / pan / presenter "talk"), its own voice,
  *                 text that slides in, and a style-specific transition to the next scene (ffmpeg xfade)
@@ -110,6 +111,8 @@ export async function buildReelVideo(input: {
   /** Video style (default classic) and the brand presenter's face for presenter scenes. */
   style?: ReelStyle;
   presenter?: { face: Buffer; name: string } | null;
+  /** Real photos and video clips first (default) or AI pictures first. */
+  prefer?: PictureSource;
 }): Promise<{ mp4: Buffer; durationSec: number; voiceProvider: string; demoImages: boolean; cover: Buffer | null }> {
   const { workspaceId, brand, postId, script } = input;
   const shots = input.shots ?? [];
@@ -121,17 +124,44 @@ export async function buildReelVideo(input: {
   const db = await getDb();
   let voiceProvider = "";
   let demoImages = false;
+  // Real clips and photos: first unless the business chose AI pictures; concept videos are illustrations.
+  const prefer: PictureSource = style === "concept" ? "ai" : (input.prefer ?? "real");
+  const useClips = prefer === "real" && stockVideoConfigured() && process.env.AGENT_STOCK !== "off";
+  const usedStock = new Set(useClips ? await usedStockIds(workspaceId, brand.id) : []);
 
   try {
     // Each scene (image + voice + frame + clip) is prepared in parallel; order is kept.
     const sceneResults = await mapLimit(script.scenes, parallelism().image, async (scene, i) => {
       const last = i === script.scenes.length - 1;
 
-      // 2. image: brand-colour typography, the presenter's face, a product screenshot in a phone, or an AI photo.
+      // 2. voice first: the scene length decides how long a real video clip must be
+      const voice = await speak({ workspaceId, brandId: brand.id, postId }, scene.voiceover);
+      voiceProvider = voice.provider;
+      const wavPath = path.join(dir, `v${i}.wav`);
+      await fs.writeFile(wavPath, voice.wav);
+      const voiceSec = wavDurationSec(voice.wav);
+      const dur = Math.max(2.5, voiceSec + 0.5);
+
+      // 3. picture: brand-colour typography, the presenter's face, a product screenshot in a phone, or an AI photo.
       const kind = scene.kind === "text" ? "text" : scene.kind === "presenter" && presenter ? "presenter" : "broll";
       const shot = scene.shot ? shots[scene.shot - 1] : undefined;
       const suffix = styleImageSuffix(style, script.look);
-      let img =
+      const query = stockQuery(scene.imagePrompt || scene.onScreen);
+      // A real video clip (people moving, real places) for photo scenes: feels shot by a person, not made by AI.
+      let clipPath: string | null = null;
+      let clipImg: { data: Buffer; mime: string; provider: string; sourceId?: string; credit?: string } | null = null;
+      if (kind === "broll" && !shot && useClips && query) {
+        const hit = await findStockVideo(query, { width: REEL_W, height: REEL_H, minSec: Math.ceil(dur), seed: postId * 10 + i, avoid: usedStock }).catch(() => null);
+        if (hit) {
+          usedStock.add(hit.sourceId);
+          clipPath = path.join(dir, `clip${i}.mp4`);
+          await fs.writeFile(clipPath, hit.data);
+          const still = path.join(dir, `still${i}.jpg`);
+          await ffmpeg(["-ss", "1", "-i", clipPath, "-frames:v", "1", "-q:v", "2", "-y", still]).catch(() => ffmpeg(["-i", clipPath!, "-frames:v", "1", "-q:v", "2", "-y", still]));
+          clipImg = { data: await fs.readFile(still), mime: "image/jpeg", provider: hit.source, sourceId: hit.sourceId, credit: hit.credit };
+        }
+      }
+      let img: { data: Buffer; mime: string; provider: string; sourceId?: string; credit?: string } = clipImg ?? (
         kind === "text"
           ? { data: await textBackground(brand.colors, i), mime: "image/png", provider: "typography" }
           : kind === "presenter"
@@ -139,16 +169,19 @@ export async function buildReelVideo(input: {
             : shot
               ? { data: await productShotBackground(shot, brand.colors), mime: "image/png", provider: "product_shot" }
               : await generateImage(
-                  { workspaceId, brandId: brand.id, purpose: "reel_scene", subject: { type: "post", id: postId } },
+                  { workspaceId, brandId: brand.id, purpose: "reel_scene", subject: { type: "post", id: postId }, prefer },
                   {
+                    query,
+                    avoid: [...usedStock],
                     prompt: `${imagePrompt(brand, scene.imagePrompt || scene.onScreen, "band")}${suffix ? `, ${suffix}` : ""}. Vertical 9:16 ${style === "concept" ? "illustration" : "photo"}`,
                     width: REEL_W,
                     height: REEL_H,
                     colors: brand.colors,
                     seed: postId * 10 + i,
                   },
-                );
+                ));
       // Every image AI out for today: prefer real material (the post's AI photo, the app screenshots) over brand art.
+      if (img.sourceId) usedStock.add(img.sourceId);
       if (img.provider === "brand_art" && input.fallbacks?.length) {
         const pick = input.fallbacks[i % input.fallbacks.length];
         img = pick.kind === "shot"
@@ -170,20 +203,15 @@ export async function buildReelVideo(input: {
           width: REEL_W,
           height: REEL_H,
           bytes: img.data.length,
-          prompt: scene.imagePrompt,
+          prompt: clipPath ? `Video clip: ${scene.imagePrompt}` : scene.imagePrompt,
           provider: img.provider,
+          sourceId: img.sourceId ?? null,
+          credit: img.credit ?? null,
           demo: isDemoProvider(img.provider),
         });
         if (isDemoProvider(img.provider)) demoImages = true;
       }
 
-      // 3. voice
-      const voice = await speak({ workspaceId, brandId: brand.id, postId }, scene.voiceover);
-      voiceProvider = voice.provider;
-      const wavPath = path.join(dir, `v${i}.wav`);
-      await fs.writeFile(wavPath, voice.wav);
-      const voiceSec = wavDurationSec(voice.wav);
-      const dur = Math.max(2.5, voiceSec + 0.5);
       // Animated captions (a few words at a time, in time with the voice) on every scene except the
       // call to action and text-only scenes, which already show their words big.
       const live = !last && kind !== "text";
@@ -221,13 +249,18 @@ export async function buildReelVideo(input: {
       const frames = Math.ceil(dur * FPS);
       const m = motionFor(style, i, kind);
       const clip = path.join(dir, `c${i}.mp4`);
+      // Real clip: cropped to fill the vertical frame, its own sound dropped (voice + music only).
+      // Photo: a slow camera move (zoom / pan).
+      const bgFilter = clipPath
+        ? `[0:v]scale=${REEL_W}:${REEL_H}:force_original_aspect_ratio=increase,crop=${REEL_W}:${REEL_H},setsar=1,fps=${FPS},format=yuv420p[bg];`
+        : `[0:v]scale=1620:2880,zoompan=z='${m.z}':x='${m.x}':y='${m.y}':d=1:s=${REEL_W}x${REEL_H}:fps=${FPS}[bg];`;
       await ffmpeg([
-        "-loop", "1", "-framerate", String(FPS), "-i", bgPath,
+        ...(clipPath ? ["-stream_loop", "-1", "-i", clipPath] : ["-loop", "1", "-framerate", String(FPS), "-i", bgPath]),
         "-i", wavPath,
         "-loop", "1", "-framerate", String(FPS), "-i", overlayPath,
         ...capPaths.flatMap((p) => ["-loop", "1", "-framerate", String(FPS), "-i", p]),
         "-filter_complex",
-        `[0:v]scale=1620:2880,zoompan=z='${m.z}':x='${m.x}':y='${m.y}':d=1:s=${REEL_W}x${REEL_H}:fps=${FPS}[bg];` +
+        bgFilter +
           `[2:v]format=rgba,fade=t=in:st=0.1:d=0.4:alpha=1[ov];` +
           `[bg][ov]overlay=x=0:y='if(lt(t,0.5),70*(1-t/0.5),0)':shortest=1[s0];` +
           // Each caption chunk pops in for its words, with a small rise.
@@ -344,7 +377,7 @@ export async function makeReel(campaign: Campaign, brand: Brand, post: Post, req
   const bgFile = bg && bg.provider !== "brand_art" ? await getFile(bg.storageKey) : null;
   if (bgFile && bg) fallbacks.push({ kind: "photo", data: bgFile, mime: bg.mime, provider: bg.provider ?? "image" });
   for (const f of shotFiles) fallbacks.push({ kind: "shot", data: f, mime: "image/png", provider: "product_shot" });
-  const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script, shots: shotFiles.length === shotRows.length ? shotFiles : [], fallbacks, style, presenter });
+  const video = await buildReelVideo({ workspaceId: post.workspaceId, brand, postId: post.id, script, shots: shotFiles.length === shotRows.length ? shotFiles : [], fallbacks, style, presenter, prefer: brand.pictureSource === "ai" ? "ai" : "real" });
   let coverKey: string | undefined;
   if (video.cover) {
     coverKey = newKey(post.workspaceId, "cover", "image/png");

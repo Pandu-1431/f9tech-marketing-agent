@@ -60,6 +60,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
               <p className="text-xs text-zinc-400">
                 {asset.width && asset.height ? `${asset.width}×${asset.height}` : ""} · {asset.provider}
               </p>
+              {asset.credit && <p className="truncate text-xs text-zinc-500" title={asset.credit}>{asset.credit}</p>}
               <a href={publicUrl(asset.storageKey)} target="_blank" rel="noreferrer" className="text-xs text-indigo-600">
                 Open
               </a>

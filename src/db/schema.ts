@@ -166,6 +166,9 @@ export const brands = pgTable(
     keyFacts: text("key_facts"),
     // A few of the owner's own past posts: the writers copy this voice.
     voiceSamples: text("voice_samples"),
+    // Pictures: "real" = real photos and video clips (Pexels, Pixabay) first, AI pictures when none fit;
+    // "ai" = AI pictures first.
+    pictureSource: varchar("picture_source", { length: 10 }).default("real").notNull(),
     // SEO kit: keywords people really search + hashtag sets, built from search suggestions (src/agent/seo.ts).
     seoKit: jsonb("seo_kit").$type<SeoKit | null>(),
     presenter: jsonb("presenter").$type<Presenter | null>(),
@@ -399,6 +402,10 @@ export const assets = pgTable(
     provider: varchar("provider", { length: 40 }),
     // Videos: which style made it (ReelStyle).
     style: varchar("style", { length: 20 }),
+    // Real photos / clips: the source's id ("pexels:123") so a business never gets the same photo twice,
+    // and the credit line ("Photo: Ravi K on Pexels").
+    sourceId: varchar("source_id", { length: 80 }),
+    credit: text("credit"),
     // true = made (fully or partly) by the demo generator; shown with a DEMO label.
     demo: boolean("demo").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

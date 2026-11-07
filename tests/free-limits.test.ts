@@ -44,7 +44,9 @@ describe("free AI limits", () => {
       },
     });
     vi.stubEnv("AGENT_IMAGE_CHAIN", "cloudflare");
-    expect(fullImageChain()).toEqual(["cloudflare", "brand_art"]);
+    expect(fullImageChain()).toEqual(["cloudflare", "stock", "brand_art"]);
+    // Real photos first when the business wants them.
+    expect(fullImageChain("real")).toEqual(["stock", "cloudflare", "brand_art"]);
     const a = await generateImage({ workspaceId: ws.id, purpose: "post_background" }, { prompt: "x", width: 400, height: 500, colors: ["#3730a3", "#f59e0b"], seed: 3 });
     expect(a.provider).toBe("brand_art");
     expect(a.data.length).toBeGreaterThan(1000);

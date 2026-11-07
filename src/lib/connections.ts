@@ -30,6 +30,7 @@ export const PROVIDER_HELP: Record<string, { label: string; free: string; url?: 
   "image:cloudflare": { label: "Cloudflare Workers AI (FLUX)", free: "Free daily allowance", url: "https://dash.cloudflare.com/?to=/:account/ai/workers-ai", env: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
   "image:huggingface": { label: "Hugging Face (FLUX)", free: "Free monthly credits", url: "https://huggingface.co/settings/tokens", env: ["HF_TOKEN"] },
   "image:pollinations": { label: "Pollinations", free: "Free, no key (test use)", env: [] },
+  "image:stock": { label: "Real photos & video clips (Pexels, Pixabay)", free: "Free, add one or both keys", url: "https://www.pexels.com/api/", env: ["PEXELS_API_KEY", "PIXABAY_API_KEY"] },
   "image:brand_art": { label: "Brand art (built in)", free: "Free, unlimited: designed on-brand backgrounds when the image AIs are out", env: [] },
   "image:fake": { label: "Demo backgrounds", free: "Built in, colour gradients", env: [] },
   "voice:cloudflare": { label: "Cloudflare MeloTTS", free: "Same Cloudflare key as images", url: "https://dash.cloudflare.com/?to=/:account/ai/workers-ai", env: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
@@ -106,7 +107,7 @@ export async function testConnection(task: Task, name: string): Promise<TestResu
       const built = buildImageProvider(name);
       if (!built) return { ok: false, message: "Not configured — add the key to .env.local and restart.", ms: 0 };
       const r = await built.provider.generate({ prompt: "a small cup of masala chai on a wooden table, photo", width: 512, height: 512 });
-      return { ok: true, message: `Image received: ${Math.round(r.data.length / 1024)} KB ${r.mime}`, ms: Date.now() - started };
+      return { ok: true, message: `Image received: ${Math.round(r.data.length / 1024)} KB ${r.mime}${r.credit ? ` (${r.credit})` : ""}`, ms: Date.now() - started };
     }
     const p = buildVoiceProvider(name);
     if (!p) return { ok: false, message: "Not configured — see the setup notes.", ms: 0 };
